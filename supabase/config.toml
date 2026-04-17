@@ -1,0 +1,4 @@
+project_id = "empxkrhfjygyaucnbbkg"
+
+[functions.parse-expenses]
+verify_jwt = false
