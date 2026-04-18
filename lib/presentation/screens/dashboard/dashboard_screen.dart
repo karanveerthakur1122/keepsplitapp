@@ -13,7 +13,6 @@ import '../../widgets/collaboration/share_dialog.dart';
 import '../../widgets/editor/note_editor_sheet.dart';
 import '../../widgets/navigation/app_header.dart';
 import '../../widgets/navigation/edge_swipe_drawer.dart';
-import '../../widgets/liquid_glass/real_liquid_glass.dart';
 import '../../widgets/notes/create_note_sheet.dart';
 import '../../widgets/notes/note_grid.dart';
 
@@ -318,27 +317,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             ],
           ),
         ),
-        floatingActionButton: RealLiquidGlass.circle(
-          child: SizedBox(
-            width: 60,
-            height: 60,
-            child: Material(
-              color: Colors.transparent,
-              shape: const CircleBorder(),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: _createNote,
-                customBorder: const CircleBorder(),
-                child: Center(
-                  child: Icon(
-                    Icons.add_rounded,
-                    size: 26,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                ),
-              ),
-            ),
-          ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: _createNote,
+          child: const Icon(Icons.add_rounded, size: 26),
         )
             .animate()
             .scale(

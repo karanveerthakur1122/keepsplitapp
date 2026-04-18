@@ -124,15 +124,34 @@ class _LiquidGlassCardState extends State<LiquidGlassCard>
             },
             onTapCancel: () => _pressController.reverse(),
             onLongPress: widget.onLongPress,
-            // Outer DecoratedBox provides the drop shadow in light mode —
-            // it's placed OUTSIDE the ClipRRect so the shadow isn't clipped
-            // away. In dark mode the shadow list is empty.
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: br,
-                boxShadow: liquidGlassShadows(context),
-              ),
-              child: RepaintBoundary(
+            // Outer DecoratedBox carries the drop shadow. It has to sit
+            // OUTSIDE the ClipRRect — otherwise the shadow would be clipped
+            // by the same rounded rect and never paint. Dual layer: a
+            // tight, dark layer for the contact shadow and a softer,
+            // larger one for ambient depth.
+            child: RepaintBoundary(
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: br,
+                  boxShadow: [
+                    BoxShadow(
+                      color: isDark
+                          ? Colors.black.withValues(alpha: 0.45)
+                          : Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 18,
+                      spreadRadius: -2,
+                      offset: const Offset(0, 6),
+                    ),
+                    BoxShadow(
+                      color: isDark
+                          ? Colors.black.withValues(alpha: 0.25)
+                          : Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 4,
+                      spreadRadius: 0,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+                ),
                 child: ClipRRect(
                   borderRadius: br,
                   child: BackdropFilter(

@@ -31,28 +31,22 @@ class LiquidGlassSurface extends StatelessWidget {
 
     final br = BorderRadius.circular(borderRadius);
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
+    return RepaintBoundary(
+      child: ClipRRect(
         borderRadius: br,
-        boxShadow: liquidGlassShadows(context),
-      ),
-      child: RepaintBoundary(
-        child: ClipRRect(
-          borderRadius: br,
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(
-              sigmaX: config.blurAmount,
-              sigmaY: config.blurAmount,
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(
+            sigmaX: config.blurAmount,
+            sigmaY: config.blurAmount,
+          ),
+          child: Container(
+            padding: padding,
+            decoration: BoxDecoration(
+              borderRadius: br,
+              color: tintColor,
+              border: Border.all(color: borderColor, width: 0.5),
             ),
-            child: Container(
-              padding: padding,
-              decoration: BoxDecoration(
-                borderRadius: br,
-                color: tintColor,
-                border: Border.all(color: borderColor, width: 0.5),
-              ),
-              child: child,
-            ),
+            child: child,
           ),
         ),
       ),

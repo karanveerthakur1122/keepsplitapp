@@ -29,35 +29,25 @@ class LiquidGlassElevated extends StatelessWidget {
         ? Colors.white.withValues(alpha: config.borderOpacity * 0.4)
         : Colors.white.withValues(alpha: config.borderOpacity);
 
-    final br = BorderRadius.circular(borderRadius);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: br,
-        boxShadow: liquidGlassShadows(
-          context,
-          level: LiquidGlassElevation.elevated,
-        ),
-      ),
-      child: RepaintBoundary(
-        child: ClipRRect(
-          borderRadius: br,
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(
-              sigmaX: config.blurAmount,
-              sigmaY: config.blurAmount,
+    return RepaintBoundary(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(borderRadius),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(
+            sigmaX: config.blurAmount,
+            sigmaY: config.blurAmount,
+          ),
+          child: Container(
+            padding: padding,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(borderRadius),
+              color: tintColor,
+              border: borderRadius > 0
+                  ? Border.all(color: borderColor, width: 0.5)
+                  : Border(
+                      bottom: BorderSide(color: borderColor, width: 0.5)),
             ),
-            child: Container(
-              padding: padding,
-              decoration: BoxDecoration(
-                borderRadius: br,
-                color: tintColor,
-                border: borderRadius > 0
-                    ? Border.all(color: borderColor, width: 0.5)
-                    : Border(
-                        bottom: BorderSide(color: borderColor, width: 0.5)),
-              ),
-              child: child,
-            ),
+            child: child,
           ),
         ),
       ),

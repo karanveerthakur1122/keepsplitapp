@@ -30,7 +30,6 @@ dependencies:
   url_launcher: ^6.3.1
   flutter_dotenv: ^5.2.1
   flutter_displaymode: ^0.6.0
-  liquid_glass_renderer: ^0.1.1-dev.0
 
 dev_dependencies:
   flutter_test:
@@ -41,9 +40,23 @@ dev_dependencies:
   json_serializable: ^6.9.0
   drift_dev: ^2.22.0
   riverpod_generator: ^2.6.2
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
 
   assets:
     - .env
+    - assets/icon/logo png.png
+
+# Generates Android mipmap icons at every density from a single source PNG.
+# Run: `dart run flutter_launcher_icons`
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: false
+  image_path: "assets/icon/logo png.png"
+  # Android 8+ adaptive icon: black background + the full image as foreground.
+  # Ensures the icon fills whatever shape mask the launcher applies.
+  adaptive_icon_background: "#0A0A0A"
+  adaptive_icon_foreground: "assets/icon/logo png.png"
+  min_sdk_android: 21

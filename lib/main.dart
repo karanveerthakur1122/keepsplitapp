@@ -62,20 +62,38 @@ class _BootState extends State<_Boot> {
 /// no flash between the Android launch theme and the first Flutter frame.
 class _Splash extends StatelessWidget {
   const _Splash();
+
   @override
   Widget build(BuildContext context) {
-    return const Directionality(
+    return Directionality(
       textDirection: TextDirection.ltr,
       child: ColoredBox(
-        color: Color(0xFF0B0718),
+        color: const Color(0xFF0B0718),
         child: Center(
-          child: SizedBox(
-            width: 36,
-            height: 36,
-            child: CircularProgressIndicator(
-              strokeWidth: 2.5,
-              valueColor: AlwaysStoppedAnimation(Color(0xFFB79BFF)),
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Image.asset(
+                  'assets/icon/logo png.png',
+                  width: 52,
+                  height: 52,
+                  fit: BoxFit.cover,
+                  filterQuality: FilterQuality.high,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const SizedBox(
+                width: 36,
+                height: 36,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  valueColor: AlwaysStoppedAnimation(Color(0xFFB79BFF)),
+                ),
+              ),
+            ],
           ),
         ),
       ),

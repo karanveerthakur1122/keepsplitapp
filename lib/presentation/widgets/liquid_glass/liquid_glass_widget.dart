@@ -67,27 +67,21 @@ class _LiquidGlassWidgetState extends State<LiquidGlassWidget>
 
     final br = BorderRadius.circular(widget.borderRadius);
 
-    Widget glass = DecoratedBox(
-      decoration: BoxDecoration(
+    Widget glass = RepaintBoundary(
+      child: ClipRRect(
         borderRadius: br,
-        boxShadow: liquidGlassShadows(context),
-      ),
-      child: RepaintBoundary(
-        child: ClipRRect(
-          borderRadius: br,
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(
-              sigmaX: config.blurAmount,
-              sigmaY: config.blurAmount,
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(
+            sigmaX: config.blurAmount,
+            sigmaY: config.blurAmount,
+          ),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: br,
+              color: tintColor,
+              border: Border.all(color: borderColor, width: 0.5),
             ),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: br,
-                color: tintColor,
-                border: Border.all(color: borderColor, width: 0.5),
-              ),
-              child: widget.child,
-            ),
+            child: widget.child,
           ),
         ),
       ),

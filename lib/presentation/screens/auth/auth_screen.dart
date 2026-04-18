@@ -120,22 +120,32 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              scheme.primary,
-                              AppColors.accentB,
-                            ],
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.asset(
+                          'assets/icon/logo png.png',
+                          width: 72,
+                          height: 72,
+                          fit: BoxFit.cover,
+                          filterQuality: FilterQuality.high,
+                          errorBuilder: (_, __, ___) => Container(
+                            width: 72,
+                            height: 72,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  scheme.primary,
+                                  AppColors.accentB,
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: const Icon(
+                              Icons.sticky_note_2_rounded,
+                              size: 32,
+                              color: Colors.white,
+                            ),
                           ),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: const Icon(
-                          Icons.sticky_note_2_rounded,
-                          size: 28,
-                          color: Colors.white,
                         ),
                       )
                           .animate()
