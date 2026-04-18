@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/haptics.dart';
 import '../../../domain/entities/note.dart';
 import '../../providers/collaborator_counts_provider.dart';
@@ -132,14 +131,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     final filteredNotes = ref.watch(filteredNotesProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final currentSection = ref.watch(dashboardSectionProvider);
+    final isHome = currentSection == DashboardSection.all;
+
     return PopScope(
-      // If the drawer is open, back closes the drawer. Otherwise back should
-      // exit the app (we're at the root of the app's nav stack).
-      canPop: !_drawerOpen,
+      // Block system pop when drawer is open OR we're on a sub-section,
+      // so we can intercept and navigate back to "All" first.
+      canPop: !_drawerOpen && isHome,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
         if (_drawerOpen) {
           _toggleDrawer();
+          return;
+        }
+        if (!isHome) {
+          ref.read(dashboardSectionProvider.notifier).state =
+              DashboardSection.all;
           return;
         }
         await SystemNavigator.pop();
@@ -149,14 +156,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             ? SystemUiOverlayStyle.light
             : SystemUiOverlayStyle.dark,
         child: Scaffold(
-        body: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: isDark ? AppColors.darkGradient : AppColors.lightGradient,
-            ),
-          ),
+        body: ColoredBox(
+          color: isDark
+              ? const Color(0xFF0C0A1D)
+              : const Color(0xFFF3F1F9),
           child: Stack(
             children: [
               Column(
