@@ -78,6 +78,32 @@ class SupabaseRealtimeDatasource {
     return channel;
   }
 
+  RealtimeChannel subscribeToCollaborators(
+    String noteId, {
+    required void Function() onAnyChange,
+  }) {
+    final channelName = 'collabs-$noteId';
+    _channels[channelName]?.unsubscribe();
+
+    final channel = _client.channel(channelName);
+    channel
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'note_collaborators',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'note_id',
+            value: noteId,
+          ),
+          callback: (_) => onAnyChange(),
+        )
+        .subscribe();
+
+    _channels[channelName] = channel;
+    return channel;
+  }
+
   RealtimeChannel subscribeToExpenses(
     String noteId, {
     required void Function() onAnyChange,

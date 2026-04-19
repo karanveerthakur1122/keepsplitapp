@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show AuthException;
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/haptics.dart';
@@ -33,8 +34,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final user = ref.read(currentUserProvider);
     if (user == null) return;
     final profile = await ref.read(authRepositoryProvider).getProfile(user.id);
-    if (profile != null && mounted) {
+    if (!mounted) return;
+    if (profile != null && profile.displayName.isNotEmpty) {
       _nameCtrl.text = profile.displayName;
+    } else {
+      // Fall back to auth metadata if the profiles row doesn't exist yet.
+      _nameCtrl.text =
+          user.userMetadata?['display_name'] as String? ??
+          user.userMetadata?['full_name'] as String? ??
+          user.userMetadata?['name'] as String? ??
+          '';
     }
   }
 
@@ -57,9 +66,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   String _humanError(Object e) {
+    // Supabase AuthException has a .message property.
+    if (e is AuthException) return e.message;
+
     final s = e.toString().replaceFirst('Exception: ', '');
-    // Supabase auth exceptions often embed a JSON error body — strip it
-    // down to the message for UX.
     if (s.contains('AuthException')) {
       final match = RegExp(r'message: ([^,}]+)').firstMatch(s);
       if (match != null) return match.group(1)!.trim();
@@ -87,14 +97,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             userId: user.id,
             displayName: newName,
           );
-      // Refresh BOTH the current profile and the keyed profile providers so
-      // the drawer avatar / expense payer lists pick up the new name.
+      // Refresh all providers that surface the display name so the drawer,
+      // header, expense payer lists, and collaborator chips all update.
       ref.invalidate(currentProfileProvider);
       ref.invalidate(profileProvider(user.id));
+      ref.invalidate(authStateProvider);
       if (!mounted) return;
       Haptics.confirm();
       messenger.showSnackBar(
-        const SnackBar(content: Text('Profile updated')),
+        const SnackBar(
+          content: Text('Profile updated'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(e.message)),
       );
     } catch (e) {
       if (!mounted) return;
@@ -108,7 +127,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _changePassword() async {
     final messenger = ScaffoldMessenger.of(context);
-    if (_passwordCtrl.text.length < 6) {
+    final pw = _passwordCtrl.text.trim();
+    if (pw.length < 6) {
       messenger.showSnackBar(
         const SnackBar(
             content: Text('Password must be at least 6 characters')),
@@ -119,14 +139,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     FocusScope.of(context).unfocus();
     setState(() => _passwordLoading = true);
     try {
-      await ref
-          .read(authRepositoryProvider)
-          .updatePassword(_passwordCtrl.text);
+      await ref.read(authRepositoryProvider).updatePassword(pw);
       if (!mounted) return;
       _passwordCtrl.clear();
       Haptics.confirm();
       messenger.showSnackBar(
-        const SnackBar(content: Text('Password updated')),
+        const SnackBar(
+          content: Text('Password updated successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(e.message)),
       );
     } catch (e) {
       if (!mounted) return;

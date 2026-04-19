@@ -6,6 +6,8 @@ import '../../../core/utils/haptics.dart';
 import '../../../domain/entities/note.dart';
 import '../../../domain/entities/profile.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/collaborator_counts_provider.dart';
+import '../../providers/collaborators_provider.dart';
 import '../../providers/expense_provider.dart';
 import '../../providers/notes_provider.dart';
 import '../../providers/realtime_provider.dart';
@@ -108,6 +110,12 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
 
     _trackPresenceWhenReady(user.id, user.email ?? '');
 
+    realtime.subscribeToCollaborators(widget.note.id, onAnyChange: () {
+      if (!mounted) return;
+      ref.invalidate(collaboratorsProvider(widget.note.id));
+      ref.invalidate(collaboratorCountsProvider);
+    });
+
     realtime.subscribeToExpenses(widget.note.id, onAnyChange: () {
       if (mounted) ref.invalidate(noteExpensesProvider(widget.note.id));
     });
@@ -157,6 +165,7 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
     _debouncer.dispose();
     final realtime = ref.read(realtimeDatasourceProvider);
     realtime.unsubscribe('note-${widget.note.id}');
+    realtime.unsubscribe('collabs-${widget.note.id}');
     realtime.unsubscribe('presence-${widget.note.id}');
     realtime.unsubscribe('expenses-${widget.note.id}');
     super.dispose();

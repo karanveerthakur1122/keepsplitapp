@@ -59,11 +59,30 @@ class SupabaseAuthDatasource {
     required String userId,
     String? displayName,
   }) async {
-    final updates = <String, dynamic>{};
-    if (displayName != null) updates['display_name'] = displayName;
-    if (updates.isEmpty) return;
+    if (displayName == null) return;
 
-    await _client.from('profiles').update(updates).eq('user_id', userId);
+    final user = _client.auth.currentUser;
+    final email = user?.email ?? '';
+
+    // Upsert into profiles so the operation succeeds even when the
+    // handle_new_user trigger didn't create the row.
+    await _client.from('profiles').upsert(
+      {
+        'user_id': userId,
+        'display_name': displayName,
+        'email': email.toLowerCase(),
+      },
+      onConflict: 'user_id',
+    );
+
+    // Also update Supabase auth user_metadata so that
+    // user.userMetadata['display_name'] stays in sync everywhere.
+    await _client.auth.updateUser(
+      UserAttributes(data: {
+        'display_name': displayName,
+        'full_name': displayName,
+      }),
+    );
   }
 
   Future<List<ProfileModel>> getProfilesByIds(List<String> userIds) async {
