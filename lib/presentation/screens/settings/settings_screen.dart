@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/haptics.dart';
+import '../../../core/utils/sign_out_helper.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../widgets/liquid_glass/liquid_glass_input.dart';
@@ -339,7 +340,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       child: OutlinedButton.icon(
                         onPressed: () async {
                           Haptics.confirm();
-                          await ref.read(authRepositoryProvider).signOut();
+                          await performSignOut(ref);
                         },
                         icon: Icon(Icons.logout_rounded,
                             color: scheme.error, size: 18),

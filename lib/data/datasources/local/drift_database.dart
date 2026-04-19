@@ -78,6 +78,18 @@ class AppDatabase extends _$AppDatabase {
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
       );
+
+  /// Wipe every table. Called on sign-out so the next user never sees
+  /// stale data from the previous account.
+  Future<void> clearAll() async {
+    await transaction(() async {
+      await delete(localNotes).go();
+      await delete(localExpenses).go();
+      await delete(localExpenseItems).go();
+      await delete(localItemParticipants).go();
+      await delete(syncQueue).go();
+    });
+  }
 }
 
 LazyDatabase _openConnection() {

@@ -70,7 +70,18 @@ class SupabaseCollaboratorDatasource {
   }
 
   Future<void> joinViaToken(String token, String userId) async {
-    await _client.rpc('join_note_via_token', params: {'p_token': token});
+    try {
+      await _client.rpc('join_note_via_token', params: {'p_token': token});
+    } on PostgrestException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('invalid share token')) {
+        throw Exception('Invalid share token');
+      }
+      if (msg.contains('not authenticated')) {
+        throw Exception('Not authenticated');
+      }
+      throw Exception('Failed to join note: ${e.message}');
+    }
   }
 
   Future<void> leaveNote(String noteId, String userId) async {

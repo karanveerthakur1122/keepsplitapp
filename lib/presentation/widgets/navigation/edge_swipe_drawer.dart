@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/haptics.dart';
+import '../../../core/utils/sign_out_helper.dart';
 import '../../../data/datasources/remote/supabase_collaborator_datasource.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/notes_provider.dart';
@@ -240,7 +241,7 @@ class EdgeSwipeDrawer extends ConsumerWidget {
                             const VisualDensity(horizontal: 0, vertical: -2),
                         onTap: () async {
                           onClose();
-                          await ref.read(authRepositoryProvider).signOut();
+                          await performSignOut(ref);
                         },
                       ),
                     ),
@@ -331,14 +332,23 @@ class _JoinByCodeDialogState extends ConsumerState<_JoinByCodeDialog> {
   }
 
   String _friendlyError(Object e) {
-    final s = e.toString();
-    if (s.contains('Invalid share token')) {
+    final s = e.toString().toLowerCase();
+    if (s.contains('invalid share token')) {
       return 'Invite code is invalid or expired.';
     }
-    if (s.contains('Not authenticated')) {
+    if (s.contains('not authenticated')) {
       return 'You must be signed in.';
     }
-    return 'Couldn\'t join: $s';
+    if (s.contains('violates foreign key') || s.contains('23503')) {
+      return 'Account setup incomplete. Please sign out and sign back in, then try again.';
+    }
+    if (s.contains('does not exist') || s.contains('42883')) {
+      return 'Server is not set up for collaboration yet. Ask the note owner to update the database.';
+    }
+    if (s.contains('network') || s.contains('socket') || s.contains('host lookup')) {
+      return 'No internet connection.';
+    }
+    return 'Couldn\'t join. Please try again.';
   }
 
   @override

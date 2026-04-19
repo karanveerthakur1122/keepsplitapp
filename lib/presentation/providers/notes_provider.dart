@@ -9,6 +9,7 @@ import '../../domain/entities/note.dart';
 import '../../domain/repositories/notes_repository.dart';
 import 'auth_provider.dart';
 import 'collaborator_counts_provider.dart';
+import 'note_order_provider.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) => AppDatabase());
 
@@ -187,11 +188,29 @@ final filteredNotesProvider = Provider<AsyncValue<List<Note>>>((ref) {
           n.content.toLowerCase().contains(query));
     }
 
-    final list = filtered.toList()
-      ..sort((a, b) {
+    final list = filtered.toList();
+
+    final customOrder = ref.watch(noteOrderProvider);
+    if (customOrder.isNotEmpty) {
+      final orderMap = <String, int>{};
+      for (int i = 0; i < customOrder.length; i++) {
+        orderMap[customOrder[i]] = i;
+      }
+      list.sort((a, b) {
+        if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
+        final aIdx = orderMap[a.id];
+        final bIdx = orderMap[b.id];
+        if (aIdx != null && bIdx != null) return aIdx.compareTo(bIdx);
+        if (aIdx != null) return -1;
+        if (bIdx != null) return 1;
+        return b.updatedAt.compareTo(a.updatedAt);
+      });
+    } else {
+      list.sort((a, b) {
         if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
         return b.updatedAt.compareTo(a.updatedAt);
       });
+    }
 
     return list;
   });

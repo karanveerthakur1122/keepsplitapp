@@ -563,6 +563,25 @@ BEGIN
     RAISE EXCEPTION 'Not authenticated';
   END IF;
 
+  -- Guarantee the joining user has a profiles row. Skip entirely if one
+  -- already exists so we never touch the row or trigger a conflict path.
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles WHERE user_id = v_user_id
+  ) THEN
+    INSERT INTO public.profiles (user_id, display_name, email)
+    SELECT v_user_id,
+           COALESCE(
+             u.raw_user_meta_data->>'display_name',
+             u.raw_user_meta_data->>'full_name',
+             u.raw_user_meta_data->>'name',
+             split_part(u.email, '@', 1)
+           ),
+           LOWER(u.email)
+    FROM auth.users u
+    WHERE u.id = v_user_id
+    ON CONFLICT (user_id) DO NOTHING;
+  END IF;
+
   SELECT id, user_id INTO v_note_id, v_owner_id
   FROM public.notes
   WHERE share_token = p_token

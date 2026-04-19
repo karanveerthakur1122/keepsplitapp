@@ -2,16 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
+import '../../../core/utils/haptics.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../domain/entities/note.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/layout_provider.dart';
+import '../../providers/note_order_provider.dart';
 import '../../providers/notes_provider.dart';
 import '../common/animated_list_item.dart';
 import '../common/skeleton_loader.dart';
+import '../liquid_glass/liquid_glass_card.dart';
 import 'note_card.dart';
 
-class NoteGrid extends ConsumerWidget {
+class NoteGrid extends ConsumerStatefulWidget {
   const NoteGrid({
     super.key,
     required this.notes,
@@ -26,15 +29,199 @@ class NoteGrid extends ConsumerWidget {
   final void Function(Note note)? onNoteShare;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<NoteGrid> createState() => _NoteGridState();
+}
+
+class _NoteGridState extends ConsumerState<NoteGrid> {
+  List<Note> _localNotes = [];
+  bool _isDragging = false;
+  String? _lastHoveredTargetId;
+
+  List<Note> get _displayNotes =>
+      _isDragging ? _localNotes : widget.notes;
+
+  @override
+  void initState() {
+    super.initState();
+    _localNotes = List.of(widget.notes);
+  }
+
+  @override
+  void didUpdateWidget(covariant NoteGrid old) {
+    super.didUpdateWidget(old);
+    if (!_isDragging) {
+      _localNotes = List.of(widget.notes);
+    }
+  }
+
+  // ── Drag callbacks ────────────────────────────────────────────
+
+  void _onDragStarted(String noteId) {
+    setState(() {
+      _isDragging = true;
+      _localNotes = List.of(widget.notes);
+      _lastHoveredTargetId = null;
+    });
+    Haptics.confirm();
+  }
+
+  void _onDragEnd() {
+    if (_isDragging) {
+      ref.read(noteOrderProvider.notifier).saveOrder(
+            _localNotes.map((n) => n.id).toList(),
+          );
+    }
+    setState(() {
+      _isDragging = false;
+      _lastHoveredTargetId = null;
+    });
+  }
+
+  void _onDragCancelled() {
+    setState(() {
+      _isDragging = false;
+      _localNotes = List.of(widget.notes);
+      _lastHoveredTargetId = null;
+    });
+  }
+
+  void _onHover(String draggedId, String targetId) {
+    if (draggedId == targetId) return;
+    if (targetId == _lastHoveredTargetId) return;
+    _lastHoveredTargetId = targetId;
+
+    final from = _localNotes.indexWhere((n) => n.id == draggedId);
+    final to = _localNotes.indexWhere((n) => n.id == targetId);
+    if (from == -1 || to == -1) return;
+
+    setState(() {
+      final note = _localNotes.removeAt(from);
+      _localNotes.insert(to, note);
+    });
+    Haptics.tap();
+  }
+
+  // ── Cell width for the drag feedback overlay ──────────────────
+
+  double _cellWidth(Responsive r) {
+    final width = MediaQuery.sizeOf(context).width;
+    final pad = r.horizontalPadding * 2;
+    final spacing = r.gridSpacing * (r.gridCrossAxisCount - 1);
+    return (width - pad - spacing) / r.gridCrossAxisCount;
+  }
+
+  // ── Drag wrapper ──────────────────────────────────────────────
+
+  Widget _wrapDraggable({
+    required Note note,
+    required int index,
+    required Responsive r,
+    required Widget child,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final scheme = Theme.of(context).colorScheme;
+    final cellWidth = _cellWidth(r);
+
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) {
+        _onHover(details.data, note.id);
+        return false;
+      },
+      builder: (context, candidates, rejected) {
+        return LongPressDraggable<String>(
+          data: note.id,
+          delay: const Duration(milliseconds: 200),
+          hapticFeedbackOnStart: true,
+          maxSimultaneousDrags: 1,
+          onDragStarted: () => _onDragStarted(note.id),
+          onDragEnd: (_) => _onDragEnd(),
+          onDraggableCanceled: (_, __) => _onDragCancelled(),
+          feedback: Material(
+            color: Colors.transparent,
+            child: SizedBox(
+              width: cellWidth,
+              child: Transform.scale(
+                scale: 1.05,
+                child: Opacity(
+                  opacity: 0.92,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: isDark
+                              ? Colors.black.withValues(alpha: 0.65)
+                              : Colors.black.withValues(alpha: 0.18),
+                          blurRadius: 28,
+                          spreadRadius: 2,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: LiquidGlassCard(
+                      enable3DTilt: false,
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            note.title.isEmpty ? 'Untitled' : note.title,
+                            style: Theme.of(this.context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (note.content.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              note.content,
+                              style:
+                                  Theme.of(this.context).textTheme.bodySmall,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          childWhenDragging: Container(
+            constraints: const BoxConstraints(minHeight: 60),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: scheme.primary.withValues(alpha: 0.25),
+                width: 1.5,
+              ),
+              color: scheme.primary.withValues(alpha: 0.04),
+            ),
+          ),
+          child: child,
+        );
+      },
+    );
+  }
+
+  // ── Build helpers ─────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
     final layout = ref.watch(layoutModeProvider);
     final r = context.responsive;
+    final notes = _displayNotes;
 
-    if (isLoading && notes.isEmpty) {
+    if (widget.isLoading && widget.notes.isEmpty) {
       return _buildSkeleton(layout, r);
     }
 
-    if (notes.isEmpty) {
+    if (widget.notes.isEmpty) {
       return _buildEmpty(context);
     }
 
@@ -42,11 +229,9 @@ class NoteGrid extends ConsumerWidget {
     final currentUser = ref.watch(currentUserProvider);
 
     final child = section == DashboardSection.all
-        ? _buildSectioned(context, ref, layout, r, currentUser?.id ?? '')
-        : _buildFlat(layout, r);
+        ? _buildSectioned(notes, layout, r, currentUser?.id ?? '')
+        : _buildFlat(notes, layout, r);
 
-    // Fade + subtle scale when the user switches dashboard sections so the
-    // grid re-enter feels fluid instead of snapping.
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 160),
       switchInCurve: Curves.easeOutCubic,
@@ -68,8 +253,7 @@ class NoteGrid extends ConsumerWidget {
   }
 
   Widget _buildSectioned(
-    BuildContext context,
-    WidgetRef ref,
+    List<Note> notes,
     LayoutMode layout,
     Responsive r,
     String currentUserId,
@@ -82,9 +266,6 @@ class NoteGrid extends ConsumerWidget {
       if (note.isPinned) {
         pinned.add(note);
       } else if (note.userId != currentUserId) {
-        // Any note where I'm not the owner is shared with me — the backend's
-        // RLS only returns notes I have access to, so this is safe regardless
-        // of whether a share token exists.
         shared.add(note);
       } else {
         others.add(note);
@@ -132,12 +313,21 @@ class NoteGrid extends ConsumerWidget {
           crossAxisSpacing: r.gridSpacing,
           childCount: sectionNotes.length,
           itemBuilder: (context, index) {
-            return AnimatedListItem(
-              index: index,
-              child: NoteCard(
-                note: sectionNotes[index],
-                onTap: () => onNoteTap?.call(sectionNotes[index]),
-                onShare: () => onNoteShare?.call(sectionNotes[index]),
+            final note = sectionNotes[index];
+            return KeyedSubtree(
+              key: ValueKey(note.id),
+              child: _wrapDraggable(
+                note: note,
+                index: index,
+                r: r,
+                child: AnimatedListItem(
+                  index: index,
+                  child: NoteCard(
+                    note: note,
+                    onTap: () => widget.onNoteTap?.call(note),
+                    onShare: () => widget.onNoteShare?.call(note),
+                  ),
+                ),
               ),
             );
           },
@@ -150,15 +340,22 @@ class NoteGrid extends ConsumerWidget {
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
           (context, index) {
+            final note = sectionNotes[index];
             return Padding(
+              key: ValueKey(note.id),
               padding: EdgeInsets.only(
                   bottom: index < sectionNotes.length - 1 ? r.gridSpacing : 0),
-              child: AnimatedListItem(
+              child: _wrapDraggable(
+                note: note,
                 index: index,
-                child: NoteCard(
-                  note: sectionNotes[index],
-                  onTap: () => onNoteTap?.call(sectionNotes[index]),
-                  onShare: () => onNoteShare?.call(sectionNotes[index]),
+                r: r,
+                child: AnimatedListItem(
+                  index: index,
+                  child: NoteCard(
+                    note: note,
+                    onTap: () => widget.onNoteTap?.call(note),
+                    onShare: () => widget.onNoteShare?.call(note),
+                  ),
                 ),
               ),
             );
@@ -169,7 +366,7 @@ class NoteGrid extends ConsumerWidget {
     );
   }
 
-  Widget _buildFlat(LayoutMode layout, Responsive r) {
+  Widget _buildFlat(List<Note> notes, LayoutMode layout, Responsive r) {
     final padding = EdgeInsets.symmetric(
       horizontal: r.horizontalPadding,
       vertical: 8,
@@ -187,12 +384,21 @@ class NoteGrid extends ConsumerWidget {
         ),
         itemCount: notes.length,
         itemBuilder: (context, index) {
-          return AnimatedListItem(
-            index: index,
-            child: NoteCard(
-              note: notes[index],
-              onTap: () => onNoteTap?.call(notes[index]),
-              onShare: () => onNoteShare?.call(notes[index]),
+          final note = notes[index];
+          return KeyedSubtree(
+            key: ValueKey(note.id),
+            child: _wrapDraggable(
+              note: note,
+              index: index,
+              r: r,
+              child: AnimatedListItem(
+                index: index,
+                child: NoteCard(
+                  note: note,
+                  onTap: () => widget.onNoteTap?.call(note),
+                  onShare: () => widget.onNoteShare?.call(note),
+                ),
+              ),
             ),
           );
         },
@@ -208,12 +414,21 @@ class NoteGrid extends ConsumerWidget {
       itemCount: notes.length,
       separatorBuilder: (_, __) => SizedBox(height: r.gridSpacing),
       itemBuilder: (context, index) {
-        return AnimatedListItem(
-          index: index,
-          child: NoteCard(
-            note: notes[index],
-            onTap: () => onNoteTap?.call(notes[index]),
-            onShare: () => onNoteShare?.call(notes[index]),
+        final note = notes[index];
+        return KeyedSubtree(
+          key: ValueKey(note.id),
+          child: _wrapDraggable(
+            note: note,
+            index: index,
+            r: r,
+            child: AnimatedListItem(
+              index: index,
+              child: NoteCard(
+                note: note,
+                onTap: () => widget.onNoteTap?.call(note),
+                onShare: () => widget.onNoteShare?.call(note),
+              ),
+            ),
           ),
         );
       },
@@ -303,7 +518,8 @@ class _SectionHeader extends StatelessWidget {
         child: Row(
           children: [
             Icon(icon,
-                size: 14, color: scheme.onSurfaceVariant.withValues(alpha: 0.6)),
+                size: 14,
+                color: scheme.onSurfaceVariant.withValues(alpha: 0.6)),
             const SizedBox(width: 6),
             Text(
               title,

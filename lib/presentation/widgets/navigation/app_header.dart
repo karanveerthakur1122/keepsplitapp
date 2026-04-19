@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/haptics.dart';
+import '../../../core/utils/sign_out_helper.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/layout_provider.dart';
 import '../../providers/notes_provider.dart';
@@ -202,7 +203,7 @@ class _AppHeaderState extends ConsumerState<AppHeader> {
                   if (value == 'settings') {
                     context.push('/settings');
                   } else if (value == 'signout') {
-                    await ref.read(authRepositoryProvider).signOut();
+                    await performSignOut(ref);
                   }
                 },
               ),

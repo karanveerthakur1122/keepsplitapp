@@ -49,11 +49,25 @@ class _JoinNoteScreenState extends ConsumerState<JoinNoteScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = _humanError(e);
           _loading = false;
         });
       }
     }
+  }
+
+  String _humanError(Object e) {
+    final s = e.toString().toLowerCase();
+    if (s.contains('invalid share token')) {
+      return 'This invite link is invalid or has expired.';
+    }
+    if (s.contains('not authenticated')) {
+      return 'You must be signed in to join a note.';
+    }
+    if (s.contains('violates foreign key') || s.contains('23503')) {
+      return 'Account setup incomplete. Please sign out and sign back in, then try again.';
+    }
+    return 'Something went wrong. Please try again.';
   }
 
   @override
