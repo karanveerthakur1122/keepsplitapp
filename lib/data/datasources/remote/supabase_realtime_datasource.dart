@@ -111,6 +111,21 @@ class SupabaseRealtimeDatasource {
     final channelName = 'expenses-$noteId';
     _channels[channelName]?.unsubscribe();
 
+    // Track expense IDs that belong to this note so we can filter
+    // expense_items / expense_item_participants on the client side.
+    // Supabase Realtime doesn't support cross-table FK filters.
+    final knownExpenseIds = <String>{};
+
+    Future<void> seedExpenseIds() async {
+      final rows = await _client
+          .from('expenses')
+          .select('id')
+          .eq('note_id', noteId);
+      knownExpenseIds.addAll(rows.map((r) => r['id'] as String));
+    }
+
+    seedExpenseIds();
+
     final channel = _client.channel(channelName);
     channel
         .onPostgresChanges(
@@ -122,18 +137,72 @@ class SupabaseRealtimeDatasource {
             column: 'note_id',
             value: noteId,
           ),
-          callback: (_) => onAnyChange(),
+          callback: (payload) {
+            final id = payload.newRecord['id'] as String?;
+            if (id != null) knownExpenseIds.add(id);
+            onAnyChange();
+          },
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'expense_items',
-          callback: (_) => onAnyChange(),
+          callback: (payload) {
+            final expenseId =
+                (payload.newRecord['expense_id'] ?? payload.oldRecord['expense_id']) as String?;
+            if (expenseId != null && !knownExpenseIds.contains(expenseId)) return;
+            onAnyChange();
+          },
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'expense_item_participants',
+          callback: (payload) {
+            final itemId =
+                (payload.newRecord['item_id'] ?? payload.oldRecord['item_id']) as String?;
+            // Can't cheaply verify the item belongs to this note without
+            // another lookup, but the expense_items filter above covers
+            // the majority of noise. Let this through.
+            if (itemId == null) return;
+            onAnyChange();
+          },
+        )
+        .subscribe();
+
+    _channels[channelName] = channel;
+    return channel;
+  }
+
+  RealtimeChannel subscribeToExpenseSettings(
+    String noteId, {
+    required void Function() onAnyChange,
+  }) {
+    final channelName = 'exp-settings-$noteId';
+    _channels[channelName]?.unsubscribe();
+
+    final channel = _client.channel(channelName);
+    channel
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'note_expense_settings',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'note_id',
+            value: noteId,
+          ),
+          callback: (_) => onAnyChange(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'note_manual_users',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'note_id',
+            value: noteId,
+          ),
           callback: (_) => onAnyChange(),
         )
         .subscribe();

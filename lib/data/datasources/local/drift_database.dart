@@ -38,6 +38,7 @@ class LocalExpenses extends Table {
 class LocalExpenseItems extends Table {
   TextColumn get id => text()();
   TextColumn get expenseId => text().named('expense_id')();
+  TextColumn get payerId => text().named('payer_id').withDefault(const Constant(''))();
   TextColumn get name => text().withDefault(const Constant(''))();
   RealColumn get price => real().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime().named('created_at')();
@@ -72,11 +73,17 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            await m.addColumn(
+                localExpenseItems, localExpenseItems.payerId);
+          }
+        },
       );
 
   /// Wipe every table. Called on sign-out so the next user never sees

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/utils/extensions.dart';
 import '../../providers/expense_provider.dart';
+import '../../providers/expense_settings_provider.dart';
 import '../common/section_label.dart';
 
 class ExpenseSummary extends ConsumerWidget {
@@ -14,6 +15,9 @@ class ExpenseSummary extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final resultAsync = ref.watch(settlementProvider(noteId));
     final scheme = Theme.of(context).colorScheme;
+    final settingsVal =
+        ref.watch(noteExpenseSettingsProvider(noteId)).valueOrNull;
+    final sym = currencySymbol(settingsVal?.currency ?? 'INR');
 
     return resultAsync.when(
       data: (result) {
@@ -38,6 +42,7 @@ class ExpenseSummary extends ConsumerWidget {
                   name: b.displayName,
                   amount: b.balance,
                   isPositive: isPositive,
+                  symbol: sym,
                 );
               }).toList(),
             ),
@@ -56,6 +61,7 @@ class ExpenseSummary extends ConsumerWidget {
                       from: s.from,
                       to: s.to,
                       amount: s.amount,
+                      symbol: sym,
                     ),
                   )),
             ],
@@ -89,6 +95,7 @@ class ExpenseSummary extends ConsumerWidget {
     required String name,
     required double amount,
     required bool isPositive,
+    required String symbol,
   }) {
     final fg = isPositive ? Colors.green.shade300 : Colors.red.shade300;
     final bg =
@@ -119,7 +126,7 @@ class ExpenseSummary extends ConsumerWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            '${isPositive ? '+' : '-'}${amount.abs().toCurrency(symbol: '₹')}',
+            '${isPositive ? '+' : '-'}${amount.abs().toCurrency(symbol: symbol)}',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w800,
@@ -137,6 +144,7 @@ class ExpenseSummary extends ConsumerWidget {
     required String from,
     required String to,
     required double amount,
+    required String symbol,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
@@ -195,7 +203,7 @@ class ExpenseSummary extends ConsumerWidget {
               borderRadius: BorderRadius.circular(16),
             ),
             child: Text(
-              amount.toCurrency(symbol: '₹'),
+              amount.toCurrency(symbol: symbol),
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w800,

@@ -1,3 +1,4 @@
+// ignore_for_file: invalid_annotation_target
 import 'package:freezed_annotation/freezed_annotation.dart';
 import '../../domain/entities/expense.dart';
 import 'expense_item_model.dart';

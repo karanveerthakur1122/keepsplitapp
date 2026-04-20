@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/utils/extensions.dart';
@@ -8,6 +7,7 @@ import '../../../domain/entities/expense.dart';
 import '../../../domain/entities/expense_item.dart';
 import '../../providers/collaborators_provider.dart';
 import '../../providers/expense_provider.dart';
+import '../../providers/expense_settings_provider.dart';
 import '../common/section_label.dart';
 import '../common/sheet_drag_handle.dart';
 
@@ -138,28 +138,23 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
     super.dispose();
   }
 
-  Future<void> _addItem(List<_User> users, String currentPayerId) async {
+  void _addItem(List<_User> users, String currentPayerId) {
     final name = _nameCtrl.text.trim();
     final price = double.tryParse(_priceCtrl.text.trim()) ?? 0;
     if (name.isEmpty || price <= 0) return;
 
-    // Default split = all collaborators if user hasn't touched the chips yet.
     final selected = _newItemSplit ?? users.map((u) => u.userId).toSet();
 
     Haptics.select();
-    await ref.read(noteExpensesProvider(widget.noteId).notifier).addItem(
+    ref.read(noteExpensesProvider(widget.noteId).notifier).addItem(
           expenseId: widget.expense.id,
           name: name,
           price: price,
-          // Capture the CURRENT payer at add-time, so later changes to the
-          // expense-level payer don't silently rewrite this item's payer.
           payerId: currentPayerId,
           participantUserIds: selected.toList(),
         );
-    if (!mounted) return;
     _nameCtrl.clear();
     _priceCtrl.clear();
-    // Reset split to "all" for the next item.
     setState(() => _newItemSplit = null);
   }
 
@@ -169,15 +164,13 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
     _editingItemId.value = item.id;
   }
 
-  Future<void> _saveEditItem(ExpenseItem item) async {
+  void _saveEditItem(ExpenseItem item) {
     final newName = _editNameCtrl.text.trim();
     final newPrice = double.tryParse(_editPriceCtrl.text.trim());
 
     final nameChanged = newName.isNotEmpty && newName != item.name;
     final priceChanged = newPrice != null && newPrice != item.price;
 
-    // Make sure the item still exists before saving — another client may
-    // have deleted it during edit.
     final liveList = ref.read(noteExpensesProvider(widget.noteId)).valueOrNull;
     final stillExists = liveList
             ?.firstWhere((e) => e.id == widget.expense.id,
@@ -186,42 +179,41 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
             .any((i) => i.id == item.id) ??
         true;
     if (!stillExists) {
-      if (mounted) _editingItemId.value = null;
+      _editingItemId.value = null;
       return;
     }
 
     if (nameChanged || priceChanged) {
-      await ref.read(noteExpensesProvider(widget.noteId).notifier).updateItem(
+      ref.read(noteExpensesProvider(widget.noteId).notifier).updateItem(
             itemId: item.id,
             name: nameChanged ? newName : null,
             price: priceChanged ? newPrice : null,
           );
     }
-    if (!mounted) return;
     _editingItemId.value = null;
   }
 
-  Future<void> _toggleParticipant({
+  void _toggleParticipant({
     required String itemId,
     required String userId,
     required bool currentlyParticipating,
     required String? participantRowId,
-  }) async {
+  }) {
     Haptics.select();
     final notifier = ref.read(noteExpensesProvider(widget.noteId).notifier);
     if (currentlyParticipating) {
       if (participantRowId != null) {
-        await notifier.removeParticipant(participantRowId);
+        notifier.removeParticipant(participantRowId);
       }
     } else {
-      await notifier.addParticipant(itemId: itemId, userId: userId);
+      notifier.addParticipant(itemId: itemId, userId: userId);
     }
   }
 
-  Future<void> _setSplitNone({required ExpenseItem item}) async {
+  void _setSplitNone({required ExpenseItem item}) {
     if (item.participants.isEmpty) return;
     Haptics.select();
-    await ref
+    ref
         .read(noteExpensesProvider(widget.noteId).notifier)
         .removeParticipants(
           item.participants.map((p) => p.id).toList(),
@@ -256,6 +248,10 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
         }
       },
     );
+
+    final settingsVal =
+        ref.watch(noteExpenseSettingsProvider(widget.noteId)).valueOrNull;
+    final sym = currencySymbol(settingsVal?.currency ?? 'INR');
 
     final usersAsync = ref.watch(accessibleUsersProvider(widget.noteId));
     final users = usersAsync.valueOrNull ?? const <_User>[];
@@ -315,7 +311,7 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
                     const SizedBox(height: 8),
                     _paidByDropdown(context, scheme, isDark, expense, users),
                     const SizedBox(height: 20),
-                    _itemsHeader(context, scheme, total),
+                    _itemsHeader(context, scheme, total, sym),
                     const SizedBox(height: 10),
                     if (expense.items.isEmpty)
                       _noItemsPlaceholder(context, scheme)
@@ -332,7 +328,7 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
                                           ? _editableItem(
                                               context, scheme, isDark, item)
                                           : _itemRow(context, scheme, isDark,
-                                              item, users, expense.payerId),
+                                              item, users, expense.payerId, sym),
                                     ))
                                 .toList(),
                           );
@@ -355,7 +351,7 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
                         const SectionLabel('ADD ITEM'),
                         const SizedBox(height: 10),
                         _addItemForm(
-                            context, scheme, isDark, users, expense.payerId),
+                            context, scheme, isDark, users, expense.payerId, sym),
                       ],
                     ),
                     const SizedBox(height: 40),
@@ -474,13 +470,13 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
     );
   }
 
-  Widget _itemsHeader(BuildContext context, ColorScheme scheme, double total) {
+  Widget _itemsHeader(BuildContext context, ColorScheme scheme, double total, String sym) {
     return Row(
       children: [
         const SectionLabel('ITEMS'),
         const Spacer(),
         Text(
-          total.toCurrency(),
+          total.toCurrency(symbol: sym),
           style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w700,
                 color: scheme.primary,
@@ -511,6 +507,7 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
     ExpenseItem item,
     List<_User> users,
     String expensePayerId,
+    String sym,
   ) {
     // Prefer the item's own payer (captured at creation time). Fall back to
     // the expense-level payer for legacy rows that pre-date the per-item
@@ -547,7 +544,7 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
                   ),
                 ),
                 Text(
-                  '₹ ',
+                  '$sym ',
                   style: TextStyle(
                       color:
                           scheme.onSurfaceVariant.withValues(alpha: 0.55)),
@@ -735,6 +732,7 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
     bool isDark,
     List<_User> users,
     String currentPayerId,
+    String sym,
   ) {
     // Default selection = all collaborators (until user toggles).
     final selected = _newItemSplit ?? users.map((u) => u.userId).toSet();
@@ -766,7 +764,7 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _addItem(users, currentPayerId),
                 decoration:
-                    _compactInputDecoration(scheme, hint: '₹ Price'),
+                    _compactInputDecoration(scheme, hint: '$sym Price'),
               ),
             ),
           ],

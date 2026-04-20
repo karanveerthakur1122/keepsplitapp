@@ -9,6 +9,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/collaborator_counts_provider.dart';
 import '../../providers/collaborators_provider.dart';
 import '../../providers/expense_provider.dart';
+import '../../providers/expense_settings_provider.dart';
 import '../../providers/notes_provider.dart';
 import '../../providers/realtime_provider.dart';
 import '../collaboration/collaborator_manager.dart';
@@ -16,6 +17,7 @@ import '../collaboration/share_dialog.dart';
 import '../common/sheet_drag_handle.dart';
 import '../expenses/expense_block.dart';
 import '../expenses/expense_detail_sheet.dart';
+import '../expenses/expense_settings_sheet.dart';
 import '../expenses/expense_summary.dart';
 import 'presence_avatars.dart';
 
@@ -44,6 +46,10 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
   bool _skipHero = false;
   // Stored so we can close it cleanly in dispose().
   ProviderSubscription<AsyncValue<Profile?>>? _profileSub;
+  // Cached so dispose() doesn't need to call ref.read() after unmount.
+  late final _realtime = ref.read(realtimeDatasourceProvider);
+  final _expenseRefreshDebouncer =
+      Debouncer(delay: const Duration(milliseconds: 600));
 
   // Labels that act as per-note preferences for the editor. They're private
   // (start with `_`) so `_visibleLabels` hides them from the UI.
@@ -73,8 +79,7 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
     final user = ref.read(currentUserProvider);
     if (user == null) return;
 
-    final realtime = ref.read(realtimeDatasourceProvider);
-    realtime.subscribeToNote(widget.note.id, onUpdate: (data) {
+    _realtime.subscribeToNote(widget.note.id, onUpdate: (data) {
       if (!mounted) return;
       final newTitle = data['title'] as String? ?? '';
       final newContent = data['content'] as String? ?? '';
@@ -82,16 +87,20 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
       // Preserve caret position when syncing remote edits, otherwise the
       // cursor jumps to the start on every keystroke from another user.
       if (_titleCtrl.text != newTitle) {
+        final prevOffset = _titleCtrl.selection.baseOffset;
         _titleCtrl.value = _titleCtrl.value.copyWith(
           text: newTitle,
-          selection: TextSelection.collapsed(offset: newTitle.length),
+          selection: TextSelection.collapsed(
+              offset: prevOffset.clamp(0, newTitle.length)),
           composing: TextRange.empty,
         );
       }
       if (_contentCtrl.text != newContent) {
+        final prevOffset = _contentCtrl.selection.baseOffset;
         _contentCtrl.value = _contentCtrl.value.copyWith(
           text: newContent,
-          selection: TextSelection.collapsed(offset: newContent.length),
+          selection: TextSelection.collapsed(
+              offset: prevOffset.clamp(0, newContent.length)),
           composing: TextRange.empty,
         );
       }
@@ -110,14 +119,24 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
 
     _trackPresenceWhenReady(user.id, user.email ?? '');
 
-    realtime.subscribeToCollaborators(widget.note.id, onAnyChange: () {
+    _realtime.subscribeToCollaborators(widget.note.id, onAnyChange: () {
       if (!mounted) return;
       ref.invalidate(collaboratorsProvider(widget.note.id));
       ref.invalidate(collaboratorCountsProvider);
     });
 
-    realtime.subscribeToExpenses(widget.note.id, onAnyChange: () {
-      if (mounted) ref.invalidate(noteExpensesProvider(widget.note.id));
+    _realtime.subscribeToExpenses(widget.note.id, onAnyChange: () {
+      if (!mounted) return;
+      _expenseRefreshDebouncer.run(() {
+        if (mounted) ref.invalidate(noteExpensesProvider(widget.note.id));
+      });
+    });
+
+    _realtime.subscribeToExpenseSettings(widget.note.id, onAnyChange: () {
+      if (!mounted) return;
+      ref.invalidate(noteExpenseSettingsProvider(widget.note.id));
+      ref.invalidate(noteManualUsersProvider(widget.note.id));
+      ref.invalidate(accessibleUsersProvider(widget.note.id));
     });
   }
 
@@ -125,8 +144,7 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
     final profile = ref.read(currentProfileProvider).valueOrNull;
     final displayName = profile?.displayName ?? fallbackName;
 
-    final realtime = ref.read(realtimeDatasourceProvider);
-    realtime.trackPresence(
+    _realtime.trackPresence(
       widget.note.id,
       userId: userId,
       displayName: displayName.isEmpty ? 'User' : displayName,
@@ -141,7 +159,7 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
       _profileSub = ref.listenManual(currentProfileProvider, (_, next) {
         final name = next.valueOrNull?.displayName;
         if (name != null && name.isNotEmpty && mounted) {
-          realtime.trackPresence(
+          _realtime.trackPresence(
             widget.note.id,
             userId: userId,
             displayName: name,
@@ -163,11 +181,12 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
     _titleCtrl.dispose();
     _contentCtrl.dispose();
     _debouncer.dispose();
-    final realtime = ref.read(realtimeDatasourceProvider);
-    realtime.unsubscribe('note-${widget.note.id}');
-    realtime.unsubscribe('collabs-${widget.note.id}');
-    realtime.unsubscribe('presence-${widget.note.id}');
-    realtime.unsubscribe('expenses-${widget.note.id}');
+    _expenseRefreshDebouncer.dispose();
+    _realtime.unsubscribe('note-${widget.note.id}');
+    _realtime.unsubscribe('collabs-${widget.note.id}');
+    _realtime.unsubscribe('presence-${widget.note.id}');
+    _realtime.unsubscribe('expenses-${widget.note.id}');
+    _realtime.unsubscribe('exp-settings-${widget.note.id}');
     super.dispose();
   }
 
@@ -226,12 +245,17 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
   /// Persist the user's show/hide description preference on the note itself
   /// (via internal labels) so reopening the note preserves the choice.
   void _persistDescriptionPreference(bool show) {
-    final labels = [...widget.note.labels]
+    final notes = ref.read(notesProvider).valueOrNull ?? [];
+    final liveNote = notes.firstWhere(
+      (n) => n.id == widget.note.id,
+      orElse: () => widget.note,
+    );
+    final labels = [...liveNote.labels]
       ..remove(_labelDescHidden)
       ..remove(_labelDescShown);
     labels.add(show ? _labelDescShown : _labelDescHidden);
     ref.read(notesProvider.notifier).updateNote(
-          widget.note.copyWith(labels: labels),
+          liveNote.copyWith(labels: labels),
         );
   }
 
@@ -255,8 +279,13 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
       if (!mounted) return;
       realtime.updateTyping(widget.note.id, false);
       _lastTypingSignalAt = null;
+      final notes = ref.read(notesProvider).valueOrNull ?? [];
+      final liveNote = notes.firstWhere(
+        (n) => n.id == widget.note.id,
+        orElse: () => widget.note,
+      );
       ref.read(notesProvider.notifier).updateNote(
-            widget.note.copyWith(
+            liveNote.copyWith(
               title: _titleCtrl.text,
               content: _contentCtrl.text,
             ),
@@ -269,7 +298,6 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final presenceUsers = ref.watch(presenceUsersProvider(widget.note.id));
-    final expensesAsync = ref.watch(noteExpensesProvider(widget.note.id));
 
     return DraggableScrollableSheet(
       initialChildSize: 0.88,
@@ -550,50 +578,118 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      expensesAsync.when(
-                        data: (expenses) {
-                          if (expenses.isEmpty) {
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 24),
-                              child: Center(
-                                child: Text(
-                                  'No expenses yet. Tap + to add one.',
-                                  style: TextStyle(
-                                    color: scheme.onSurfaceVariant
-                                        .withValues(alpha: 0.5),
+                      Consumer(
+                        builder: (context, ref, _) {
+                          final expensesAsync = ref.watch(
+                              noteExpensesProvider(widget.note.id));
+                          return expensesAsync.when(
+                            data: (expenses) {
+                              if (expenses.isEmpty) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 24),
+                                  child: Center(
+                                    child: Text(
+                                      'No expenses yet. Tap + to add one.',
+                                      style: TextStyle(
+                                        color: scheme.onSurfaceVariant
+                                            .withValues(alpha: 0.5),
+                                      ),
+                                    ),
                                   ),
+                                );
+                              }
+                              return Column(
+                                children: [
+                                  ...expenses.map((e) => ExpenseBlock(
+                                        key: ValueKey(e.id),
+                                        expense: e,
+                                        noteId: widget.note.id,
+                                      )),
+                                  const SizedBox(height: 16),
+                                  ExpenseSummary(
+                                      noteId: widget.note.id),
+                                  const SizedBox(height: 12),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Material(
+                                      color: scheme.primary
+                                          .withValues(alpha: 0.12),
+                                      borderRadius:
+                                          BorderRadius.circular(14),
+                                      child: InkWell(
+                                        borderRadius:
+                                            BorderRadius.circular(14),
+                                        onTap: () {
+                                          Haptics.select();
+                                          showModalBottomSheet(
+                                            context: context,
+                                            isScrollControlled: true,
+                                            backgroundColor:
+                                                Colors.transparent,
+                                            useRootNavigator: true,
+                                            builder: (_) =>
+                                                ExpenseSettingsSheet(
+                                                    noteId:
+                                                        widget.note.id),
+                                          );
+                                        },
+                                        child: Padding(
+                                          padding:
+                                              const EdgeInsets.symmetric(
+                                                  horizontal: 14,
+                                                  vertical: 9),
+                                          child: Row(
+                                            mainAxisSize:
+                                                MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                  Icons
+                                                      .settings_rounded,
+                                                  size: 16,
+                                                  color:
+                                                      scheme.primary),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                'Settings',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight:
+                                                      FontWeight.w600,
+                                                  color:
+                                                      scheme.primary,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                            skipLoadingOnReload: true,
+                            loading: () => const Padding(
+                              padding: EdgeInsets.all(24),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2),
                                 ),
                               ),
-                            );
-                          }
-                          return Column(
-                            children: [
-                              ...expenses.map((e) => ExpenseBlock(
-                                    expense: e,
-                                    noteId: widget.note.id,
-                                  )),
-                              const SizedBox(height: 16),
-                              ExpenseSummary(noteId: widget.note.id),
-                            ],
+                            ),
+                            error: (e, _) => Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Text(
+                                'Error loading expenses',
+                                style: TextStyle(color: scheme.error),
+                              ),
+                            ),
                           );
                         },
-                        loading: () => const Padding(
-                          padding: EdgeInsets.all(24),
-                          child: Center(
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          ),
-                        ),
-                        error: (e, _) => Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Text(
-                            'Error loading expenses',
-                            style: TextStyle(color: scheme.error),
-                          ),
-                        ),
                       ),
                     ],
                   ],

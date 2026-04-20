@@ -5,6 +5,7 @@ import '../../core/utils/extensions.dart';
 import '../../domain/entities/collaborator.dart';
 import '../../domain/entities/profile.dart';
 import 'auth_provider.dart';
+import 'expense_settings_provider.dart';
 
 /// The single source of truth for who has access to a note, including the
 /// owner (synthesized at index 0). Invalidate this after inviting/removing
@@ -62,12 +63,13 @@ final collaboratorsProvider =
 
 typedef AccessibleUser = ({String userId, String displayName});
 
-/// Derived provider: just the users (as `{userId, displayName}`) with access.
-/// Handy for expense-split chips.
+/// Derived provider: all users who can participate in expense splits.
+/// Merges real collaborators with manually-added users so the payer/split
+/// chips show everyone.
 final accessibleUsersProvider =
     FutureProvider.family<List<AccessibleUser>, String>((ref, noteId) async {
   final collabs = await ref.watch(collaboratorsProvider(noteId).future);
-  return collabs
+  final result = collabs
       .map((c) => (
             userId: c.userId,
             displayName: c.displayName ??
@@ -75,6 +77,15 @@ final accessibleUsersProvider =
                 c.userId.take(8),
           ))
       .toList();
+
+  // Append manual users added via Expense Settings.
+  final manualUsers =
+      await ref.watch(noteManualUsersProvider(noteId).future);
+  for (final mu in manualUsers) {
+    result.add((userId: mu.id, displayName: mu.displayName));
+  }
+
+  return result;
 });
 
 /// Shared helper for resolving a user id to a human-readable name using the

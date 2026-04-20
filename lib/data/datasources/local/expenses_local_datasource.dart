@@ -32,6 +32,7 @@ class ExpensesLocalDatasource {
           expenseId: item.expenseId,
           name: item.name,
           price: item.price,
+          payerId: item.payerId.isEmpty ? null : item.payerId,
           createdAt: item.createdAt,
           participants: participants
               .map((p) => Participant(id: p.id, itemId: p.itemId, userId: p.userId))
@@ -65,6 +66,7 @@ class ExpensesLocalDatasource {
             LocalExpenseItemsCompanion.insert(
               id: item.id,
               expenseId: item.expenseId,
+              payerId: Value(item.payerId ?? ''),
               name: Value(item.name),
               price: Value(item.price),
               createdAt: item.createdAt,

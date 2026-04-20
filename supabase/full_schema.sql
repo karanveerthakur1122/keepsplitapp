@@ -601,11 +601,16 @@ BEGIN
 END;
 $$;
 
--- Allow reading notes by share_token (for the join screen)
+-- Allow reading a SPECIFIC note by share_token (join screen passes the token
+-- as a query param / RPC argument). The previous policy exposed ALL shared
+-- notes to every authenticated user.
 DROP POLICY IF EXISTS "Users can view notes by share token" ON public.notes;
 CREATE POLICY "Users can view notes by share token" ON public.notes
   FOR SELECT TO authenticated
-  USING (share_token IS NOT NULL);
+  USING (
+    share_token IS NOT NULL
+    AND share_token = current_setting('request.query.share_token', true)
+  );
 
 -- ============================================================
 -- MIGRATION 9: Add FK from note_collaborators to profiles
@@ -649,6 +654,94 @@ SET payer_id = e.payer_id
 FROM public.expenses e
 WHERE ei.expense_id = e.id
   AND ei.payer_id IS NULL;
+
+-- ============================================================
+-- MIGRATION 11: Expense settings (currency) per note
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.note_expense_settings (
+  note_id UUID NOT NULL PRIMARY KEY REFERENCES public.notes(id) ON DELETE CASCADE,
+  currency TEXT NOT NULL DEFAULT 'INR',
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.note_expense_settings ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'note_expense_settings' AND policyname = 'Users with note access can view expense settings') THEN
+    CREATE POLICY "Users with note access can view expense settings"
+      ON public.note_expense_settings FOR SELECT TO authenticated
+      USING (has_note_access(auth.uid(), note_id));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'note_expense_settings' AND policyname = 'Users who can edit can upsert expense settings') THEN
+    CREATE POLICY "Users who can edit can upsert expense settings"
+      ON public.note_expense_settings FOR INSERT TO authenticated
+      WITH CHECK (can_edit_note(auth.uid(), note_id) OR is_note_owner(auth.uid(), note_id));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'note_expense_settings' AND policyname = 'Users who can edit can update expense settings') THEN
+    CREATE POLICY "Users who can edit can update expense settings"
+      ON public.note_expense_settings FOR UPDATE TO authenticated
+      USING (can_edit_note(auth.uid(), note_id) OR is_note_owner(auth.uid(), note_id));
+  END IF;
+END $$;
+
+DROP TRIGGER IF EXISTS update_expense_settings_updated_at ON public.note_expense_settings;
+CREATE TRIGGER update_expense_settings_updated_at BEFORE UPDATE ON public.note_expense_settings FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+-- ============================================================
+-- MIGRATION 12: Manual users for expense splitting
+-- ============================================================
+-- Users added manually by the note owner (not Supabase auth users).
+-- They participate in expense splits alongside real collaborators.
+
+CREATE TABLE IF NOT EXISTS public.note_manual_users (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  note_id UUID NOT NULL REFERENCES public.notes(id) ON DELETE CASCADE,
+  display_name TEXT NOT NULL,
+  created_by UUID NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.note_manual_users ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'note_manual_users' AND policyname = 'Users with note access can view manual users') THEN
+    CREATE POLICY "Users with note access can view manual users"
+      ON public.note_manual_users FOR SELECT TO authenticated
+      USING (has_note_access(auth.uid(), note_id));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'note_manual_users' AND policyname = 'Users who can edit can add manual users') THEN
+    CREATE POLICY "Users who can edit can add manual users"
+      ON public.note_manual_users FOR INSERT TO authenticated
+      WITH CHECK (can_edit_note(auth.uid(), note_id) OR is_note_owner(auth.uid(), note_id));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'note_manual_users' AND policyname = 'Users who can edit can update manual users') THEN
+    CREATE POLICY "Users who can edit can update manual users"
+      ON public.note_manual_users FOR UPDATE TO authenticated
+      USING (can_edit_note(auth.uid(), note_id) OR is_note_owner(auth.uid(), note_id));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'note_manual_users' AND policyname = 'Users who can edit can delete manual users') THEN
+    CREATE POLICY "Users who can edit can delete manual users"
+      ON public.note_manual_users FOR DELETE TO authenticated
+      USING (can_edit_note(auth.uid(), note_id) OR is_note_owner(auth.uid(), note_id));
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_note_manual_users_note_id ON public.note_manual_users(note_id);
+
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'note_expense_settings'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.note_expense_settings;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'note_manual_users'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.note_manual_users;
+  END IF;
+END $$;
 
 -- ============================================================
 -- Done! All tables, policies, functions, and triggers are set up.

@@ -6,6 +6,7 @@ import '../../../core/utils/haptics.dart';
 import '../../../domain/entities/expense.dart';
 import '../../providers/collaborators_provider.dart';
 import '../../providers/expense_provider.dart';
+import '../../providers/expense_settings_provider.dart';
 import 'expense_detail_sheet.dart';
 
 class ExpenseBlock extends ConsumerWidget {
@@ -22,6 +23,9 @@ class ExpenseBlock extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final settingsVal =
+        ref.watch(noteExpenseSettingsProvider(noteId)).valueOrNull;
+    final sym = currencySymbol(settingsVal?.currency ?? 'INR');
 
     final totalPrice =
         expense.items.fold<double>(0, (sum, item) => sum + item.price);
@@ -161,7 +165,7 @@ class ExpenseBlock extends ConsumerWidget {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              totalPrice.toCurrency(symbol: '₹'),
+                              totalPrice.toCurrency(symbol: sym),
                               style: Theme.of(context)
                                   .textTheme
                                   .titleSmall

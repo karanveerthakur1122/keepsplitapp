@@ -7,6 +7,7 @@ import '../../../domain/entities/note.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/collaborator_counts_provider.dart';
 import '../../providers/expense_provider.dart';
+import '../../providers/expense_settings_provider.dart';
 import '../../providers/notes_provider.dart';
 import '../common/sheet_drag_handle.dart';
 import '../liquid_glass/liquid_glass_card.dart';
@@ -36,6 +37,34 @@ class _NoteCardState extends ConsumerState<NoteCard> {
   bool get _isArchived => note.isArchived;
   List<String> get _visibleLabels =>
       note.labels.where((l) => !l.startsWith('_')).toList();
+
+  Future<bool> _confirmPermanentDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      useRootNavigator: true,
+      builder: (ctx) {
+        final scheme = Theme.of(ctx).colorScheme;
+        return AlertDialog(
+          title: const Text('Delete permanently?'),
+          content: const Text(
+            'This note will be deleted forever. This action cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(backgroundColor: scheme.error),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+    return confirmed == true;
+  }
 
   // ── Swipe-right (startToEnd) intent by note state ──────────────────────
   // Normal  → archive
@@ -138,6 +167,8 @@ class _NoteCardState extends ConsumerState<NoteCard> {
               return false;
             } else {
               if (_isTrashed) {
+                final ok = await _confirmPermanentDelete();
+                if (!ok) return false;
                 await ref.read(notesProvider.notifier).delete(note.id);
                 return true;
               } else {
@@ -444,8 +475,10 @@ class _NoteCardState extends ConsumerState<NoteCard> {
                     leading: Icon(Icons.delete_forever, color: scheme.error),
                     title: Text('Delete permanently',
                         style: TextStyle(color: scheme.error)),
-                    onTap: () {
+                    onTap: () async {
                       Navigator.pop(ctx);
+                      final ok = await _confirmPermanentDelete();
+                      if (!ok) return;
                       ref.read(notesProvider.notifier).delete(note.id);
                     },
                   ),
@@ -469,6 +502,10 @@ class _ExpensePreview extends ConsumerWidget {
     final expensesAsync = ref.watch(noteExpensesProvider(noteId));
     final expenses = expensesAsync.valueOrNull;
     if (expenses == null || expenses.isEmpty) return const SizedBox.shrink();
+
+    final settingsVal =
+        ref.watch(noteExpenseSettingsProvider(noteId)).valueOrNull;
+    final symbol = currencySymbol(settingsVal?.currency ?? 'INR');
 
     final totalItems =
         expenses.fold<int>(0, (sum, e) => sum + e.items.length);
@@ -494,7 +531,7 @@ class _ExpensePreview extends ConsumerWidget {
                 size: 12, color: Colors.green.shade700),
             const SizedBox(width: 4),
             Text(
-              '$totalItems item${totalItems == 1 ? '' : 's'} · ${totalAmount.toCurrency()}',
+              '$totalItems item${totalItems == 1 ? '' : 's'} · ${totalAmount.toCurrency(symbol: symbol)}',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: Colors.green.shade700,
                     fontWeight: FontWeight.w500,
