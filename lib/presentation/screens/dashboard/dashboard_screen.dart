@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
+import '../../../core/constants/demo_data.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/utils/haptics.dart';
 import '../../../data/datasources/remote/supabase_realtime_datasource.dart';
@@ -11,6 +13,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/collaborator_counts_provider.dart';
 import '../../providers/notes_provider.dart';
 import '../../providers/realtime_provider.dart';
+import '../../providers/tutorial_provider.dart';
 import '../../widgets/collaboration/share_dialog.dart';
 import '../../widgets/editor/note_editor_sheet.dart';
 import '../../widgets/navigation/app_header.dart';
@@ -33,6 +36,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   late Animation<double> _drawerFade;
   double _edgeSwipeDx = 0;
   late final SupabaseRealtimeDatasource _realtime;
+
+  final _fabKey = GlobalKey();
+  final _demoNoteCardKey = GlobalKey();
+  bool _tutorialShown = false;
 
   @override
   void initState() {
@@ -113,7 +120,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     if (mounted) setState(() => _drawerOpen = false);
   }
 
-  Future<void> _openEditor(Note note) async {
+  Future<void> _openEditor(Note note, {bool isDemoTutorial = false}) async {
     Haptics.select();
     await _closeDrawerIfOpen();
     if (!mounted) return;
@@ -123,8 +130,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       backgroundColor: Colors.transparent,
       useSafeArea: true,
       useRootNavigator: true,
-      builder: (_) => NoteEditorSheet(note: note),
+      builder: (_) => NoteEditorSheet(
+        note: note,
+        showTutorial: isDemoTutorial,
+      ),
     );
+    if (isDemoTutorial && mounted) {
+      ref.read(tutorialProvider.notifier).markComplete();
+    }
   }
 
   void _openShare(Note note) {
@@ -150,6 +163,73 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     if (result != null && mounted) {
       await _openEditor(result);
     }
+  }
+
+  void _maybeStartTutorial() {
+    if (_tutorialShown) return;
+    final hasSeenTutorial = ref.read(tutorialProvider);
+    if (hasSeenTutorial) return;
+    _tutorialShown = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_demoNoteCardKey.currentContext == null) return;
+
+      final targets = <TargetFocus>[
+        TargetFocus(
+          identify: 'fab',
+          keyTarget: _fabKey,
+          alignSkip: Alignment.topCenter,
+          contents: [
+            TargetContent(
+              align: ContentAlign.top,
+              builder: (context, controller) => _CoachContent(
+                title: 'Create a note',
+                body: 'Tap + to create a new note and start splitting expenses.',
+              ),
+            ),
+          ],
+        ),
+        TargetFocus(
+          identify: 'demo_note',
+          keyTarget: _demoNoteCardKey,
+          alignSkip: Alignment.bottomCenter,
+          shape: ShapeLightFocus.RRect,
+          radius: 18,
+          contents: [
+            TargetContent(
+              align: ContentAlign.bottom,
+              builder: (context, controller) => _CoachContent(
+                title: 'Sample note',
+                body:
+                    'This is a demo note with expenses already added. Tap it to see how splits and settlements work!',
+              ),
+            ),
+          ],
+        ),
+      ];
+
+      final tutorial = TutorialCoachMark(
+        targets: targets,
+        colorShadow: Colors.black,
+        opacityShadow: 0.75,
+        textSkip: 'SKIP',
+        paddingFocus: 6,
+        onClickTarget: (target) {
+          if (target.identify == 'demo_note') {
+            _openEditor(demoNote, isDemoTutorial: true);
+          }
+        },
+        onSkip: () {
+          ref.read(tutorialProvider.notifier).markComplete();
+          return true;
+        },
+      );
+
+      Future.delayed(const Duration(milliseconds: 600), () {
+        if (mounted) tutorial.show(context: context);
+      });
+    });
   }
 
   @override
@@ -205,12 +285,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                       displacement: 40,
                       edgeOffset: 8,
                       child: filteredNotes.when(
-                        data: (notes) => NoteGrid(
-                          notes: notes,
-                          isLoading: false,
-                          onNoteTap: _openEditor,
-                          onNoteShare: _openShare,
-                        ),
+                        data: (notes) {
+                          _maybeStartTutorial();
+                          return NoteGrid(
+                            notes: notes,
+                            isLoading: false,
+                            onNoteTap: (note) => _openEditor(note),
+                            onNoteShare: _openShare,
+                            demoNoteKey: _demoNoteCardKey,
+                          );
+                        },
                         loading: () => const NoteGrid(
                           notes: [],
                           isLoading: true,
@@ -347,6 +431,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           ),
         ),
         floatingActionButton: FloatingActionButton(
+          key: _fabKey,
           onPressed: _createNote,
           child: const Icon(Icons.add_rounded, size: 26),
         )
@@ -359,6 +444,42 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
               curve: Curves.elasticOut,
             ),
         ),
+      ),
+    );
+  }
+}
+
+class _CoachContent extends StatelessWidget {
+  const _CoachContent({required this.title, required this.body});
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            body,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 14,
+              height: 1.4,
+            ),
+          ),
+        ],
       ),
     );
   }

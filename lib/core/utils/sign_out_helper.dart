@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../presentation/providers/auth_provider.dart';
 import '../../presentation/providers/note_order_provider.dart';
 import '../../presentation/providers/notes_provider.dart';
+import '../../presentation/providers/tutorial_provider.dart';
 
 /// Wipes every local cache and then signs the user out of Supabase.
 ///
@@ -29,6 +30,11 @@ Future<void> performSignOut(WidgetRef ref) async {
     await prefs.remove('custom_note_order');
   } catch (_) {}
 
+  // 3b. Reset tutorial so the next user on this device gets it
+  try {
+    await ref.read(tutorialProvider.notifier).reset();
+  } catch (_) {}
+
   // 4. Sign out from Supabase FIRST. This fires the auth state change
   //    stream which causes the router to redirect to /auth and dispose
   //    the dashboard widget tree.
@@ -42,5 +48,6 @@ Future<void> performSignOut(WidgetRef ref) async {
     ref.invalidate(noteOrderProvider);
     ref.invalidate(dashboardSectionProvider);
     ref.invalidate(searchQueryProvider);
+    ref.invalidate(tutorialProvider);
   });
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
+import '../../../core/constants/demo_data.dart';
 import '../../../core/utils/app_toast.dart';
 import '../../../core/utils/debouncer.dart';
 import '../../../core/utils/haptics.dart';
@@ -13,6 +15,7 @@ import '../../providers/expense_provider.dart';
 import '../../providers/expense_settings_provider.dart';
 import '../../providers/notes_provider.dart';
 import '../../providers/realtime_provider.dart';
+import '../../providers/tutorial_provider.dart';
 import '../collaboration/collaborator_manager.dart';
 import '../collaboration/share_dialog.dart';
 import '../common/sheet_drag_handle.dart';
@@ -23,9 +26,14 @@ import '../expenses/expense_summary.dart';
 import 'presence_avatars.dart';
 
 class NoteEditorSheet extends ConsumerStatefulWidget {
-  const NoteEditorSheet({super.key, required this.note});
+  const NoteEditorSheet({
+    super.key,
+    required this.note,
+    this.showTutorial = false,
+  });
 
   final Note note;
+  final bool showTutorial;
 
   @override
   ConsumerState<NoteEditorSheet> createState() => _NoteEditorSheetState();
@@ -52,6 +60,13 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
   final _expenseRefreshDebouncer =
       Debouncer(delay: const Duration(milliseconds: 600));
 
+  final _titleKey = GlobalKey();
+  final _descToggleKey = GlobalKey();
+  final _expenseToggleKey = GlobalKey();
+  final _expenseBlockKey = GlobalKey();
+  final _expenseSummaryKey = GlobalKey();
+  bool _editorTutorialShown = false;
+
   // Labels that act as per-note preferences for the editor. They're private
   // (start with `_`) so `_visibleLabels` hides them from the UI.
   static const _labelDescHidden = '_desc_hidden_';
@@ -77,6 +92,7 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
   }
 
   void _setupRealtime() {
+    if (widget.note.id == demoNoteId) return;
     final user = ref.read(currentUserProvider);
     if (user == null) return;
 
@@ -294,11 +310,124 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
     });
   }
 
+  void _maybeStartEditorTutorial() {
+    if (!widget.showTutorial || _editorTutorialShown) return;
+    _editorTutorialShown = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_titleKey.currentContext == null) return;
+
+      final targets = <TargetFocus>[
+        TargetFocus(
+          identify: 'title',
+          keyTarget: _titleKey,
+          shape: ShapeLightFocus.RRect,
+          radius: 12,
+          contents: [
+            TargetContent(
+              align: ContentAlign.bottom,
+              builder: (context, controller) => _EditorCoachContent(
+                title: 'Note title',
+                body: 'Give your note a descriptive title.',
+              ),
+            ),
+          ],
+        ),
+        TargetFocus(
+          identify: 'desc_toggle',
+          keyTarget: _descToggleKey,
+          shape: ShapeLightFocus.Circle,
+          contents: [
+            TargetContent(
+              align: ContentAlign.bottom,
+              builder: (context, controller) => _EditorCoachContent(
+                title: 'Description toggle',
+                body: 'Tap to show or hide the note description.',
+              ),
+            ),
+          ],
+        ),
+        TargetFocus(
+          identify: 'expense_toggle',
+          keyTarget: _expenseToggleKey,
+          shape: ShapeLightFocus.Circle,
+          contents: [
+            TargetContent(
+              align: ContentAlign.bottom,
+              builder: (context, controller) => _EditorCoachContent(
+                title: 'Expense toggle',
+                body: 'Tap to show or hide the expense section.',
+              ),
+            ),
+          ],
+        ),
+        if (_expenseBlockKey.currentContext != null)
+          TargetFocus(
+            identify: 'expense_block',
+            keyTarget: _expenseBlockKey,
+            shape: ShapeLightFocus.RRect,
+            radius: 14,
+            contents: [
+              TargetContent(
+                align: ContentAlign.bottom,
+                builder: (context, controller) => _EditorCoachContent(
+                  title: 'Expense block',
+                  body:
+                      'Each block shows who paid and the items. Tap for details.',
+                ),
+              ),
+            ],
+          ),
+        if (_expenseSummaryKey.currentContext != null)
+          TargetFocus(
+            identify: 'summary',
+            keyTarget: _expenseSummaryKey,
+            shape: ShapeLightFocus.RRect,
+            radius: 14,
+            contents: [
+              TargetContent(
+                align: ContentAlign.top,
+                builder: (context, controller) => _EditorCoachContent(
+                  title: 'Balances & settlements',
+                  body:
+                      'See who owes whom and the simplest way to settle up. This updates automatically as you add expenses.',
+                ),
+              ),
+            ],
+          ),
+      ];
+
+      final tutorial = TutorialCoachMark(
+        targets: targets,
+        colorShadow: Colors.black,
+        opacityShadow: 0.75,
+        textSkip: 'SKIP',
+        paddingFocus: 6,
+        onSkip: () {
+          ref.read(tutorialProvider.notifier).markComplete();
+          return true;
+        },
+        onFinish: () {
+          ref.read(tutorialProvider.notifier).markComplete();
+        },
+      );
+
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) tutorial.show(context: context);
+      });
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final presenceUsers = ref.watch(presenceUsersProvider(widget.note.id));
+
+    if (widget.showTutorial) {
+      _maybeStartEditorTutorial();
+    }
 
     return DraggableScrollableSheet(
       initialChildSize: 0.88,
@@ -382,32 +511,38 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
                         );
                       },
                     ),
-                    _ToolbarButton(
-                      icon: _showDescription
-                          ? Icons.subject_rounded
-                          : Icons.short_text_rounded,
-                      isActive: _showDescription,
-                      color: scheme.primary,
-                      tooltip: _showDescription
-                          ? 'Hide description'
-                          : 'Add description',
-                      onPressed: () {
-                        Haptics.select();
-                        final next = !_showDescription;
-                        setState(() => _showDescription = next);
-                        _persistDescriptionPreference(next);
-                      },
+                    KeyedSubtree(
+                      key: _descToggleKey,
+                      child: _ToolbarButton(
+                        icon: _showDescription
+                            ? Icons.subject_rounded
+                            : Icons.short_text_rounded,
+                        isActive: _showDescription,
+                        color: scheme.primary,
+                        tooltip: _showDescription
+                            ? 'Hide description'
+                            : 'Add description',
+                        onPressed: () {
+                          Haptics.select();
+                          final next = !_showDescription;
+                          setState(() => _showDescription = next);
+                          _persistDescriptionPreference(next);
+                        },
+                      ),
                     ),
-                    _ToolbarButton(
-                      icon: _showExpenses
-                          ? Icons.receipt_long_rounded
-                          : Icons.receipt_long_outlined,
-                      isActive: _showExpenses,
-                      color: scheme.primary,
-                      onPressed: () {
-                        Haptics.select();
-                        setState(() => _showExpenses = !_showExpenses);
-                      },
+                    KeyedSubtree(
+                      key: _expenseToggleKey,
+                      child: _ToolbarButton(
+                        icon: _showExpenses
+                            ? Icons.receipt_long_rounded
+                            : Icons.receipt_long_outlined,
+                        isActive: _showExpenses,
+                        color: scheme.primary,
+                        onPressed: () {
+                          Haptics.select();
+                          setState(() => _showExpenses = !_showExpenses);
+                        },
+                      ),
                     ),
                     _ToolbarButton(
                       icon: Icons.delete_outline_rounded,
@@ -455,7 +590,10 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
                   ),
                   cacheExtent: 600,
                   children: [
-                    _buildTitleField(context, scheme),
+                    KeyedSubtree(
+                      key: _titleKey,
+                      child: _buildTitleField(context, scheme),
+                    ),
                     if (_showDescription) ...[
                       const SizedBox(height: 8),
                       TextField(
@@ -605,14 +743,23 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
                               }
                               return Column(
                                 children: [
-                                  ...expenses.map((e) => ExpenseBlock(
-                                        key: ValueKey(e.id),
+                                  ...expenses.asMap().entries.map((entry) {
+                                    final i = entry.key;
+                                    final e = entry.value;
+                                    return KeyedSubtree(
+                                      key: i == 0 ? _expenseBlockKey : ValueKey(e.id),
+                                      child: ExpenseBlock(
                                         expense: e,
                                         noteId: widget.note.id,
-                                      )),
+                                      ),
+                                    );
+                                  }),
                                   const SizedBox(height: 16),
-                                  ExpenseSummary(
-                                      noteId: widget.note.id),
+                                  KeyedSubtree(
+                                    key: _expenseSummaryKey,
+                                    child: ExpenseSummary(
+                                        noteId: widget.note.id),
+                                  ),
                                   const SizedBox(height: 12),
                                   Align(
                                     alignment: Alignment.centerRight,
@@ -829,6 +976,42 @@ class _CollaboratorsSheet extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _EditorCoachContent extends StatelessWidget {
+  const _EditorCoachContent({required this.title, required this.body});
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            body,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 14,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

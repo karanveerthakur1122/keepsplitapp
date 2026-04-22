@@ -11,7 +11,9 @@ import '../../presentation/screens/auth/forgot_password_screen.dart';
 import '../../presentation/screens/auth/reset_password_screen.dart';
 import '../../presentation/screens/dashboard/dashboard_screen.dart';
 import '../../presentation/screens/join_note/join_note_screen.dart';
+import '../../presentation/screens/settings/privacy_screen.dart';
 import '../../presentation/screens/settings/settings_screen.dart';
+import '../../presentation/screens/settings/terms_screen.dart';
 import '../../presentation/widgets/common/animated_list_item.dart';
 
 String? _authRedirect(GoRouterState state) {
@@ -36,8 +38,10 @@ String? _authRedirect(GoRouterState state) {
     return '/auth';
   }
 
-  final isProtected =
-      location.startsWith('/dashboard') || location.startsWith('/settings');
+  final isProtected = location.startsWith('/dashboard') ||
+      location.startsWith('/settings') ||
+      location == '/terms' ||
+      location == '/privacy';
   if (isProtected && !loggedIn) {
     return '/auth';
   }
@@ -100,7 +104,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/settings',
         pageBuilder: (context, state) => _sharedAxis(
           state,
-          const _SettingsPage(),
+          const SettingsScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/terms',
+        pageBuilder: (context, state) => _sharedAxis(
+          state,
+          const TermsScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/privacy',
+        pageBuilder: (context, state) => _sharedAxis(
+          state,
+          const PrivacyScreen(),
         ),
       ),
       GoRoute(
@@ -178,32 +196,3 @@ class _AuthRefreshNotifier extends ChangeNotifier {
   }
 }
 
-class _SettingsPage extends StatelessWidget {
-  const _SettingsPage();
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.go('/dashboard'),
-        ),
-      ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDark
-                ? [const Color(0xFF0B1220), const Color(0xFF131a2e)]
-                : [const Color(0xFFe8eef7), const Color(0xFFf0e6ff)],
-          ),
-        ),
-        child: const SettingsScreen(),
-      ),
-    );
-  }
-}
