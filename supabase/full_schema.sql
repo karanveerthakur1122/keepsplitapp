@@ -27,10 +27,10 @@ DO $$ BEGIN
     CREATE POLICY "Profiles are viewable by authenticated users" ON public.profiles FOR SELECT TO authenticated USING (true);
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Users can insert their own profile') THEN
-    CREATE POLICY "Users can insert their own profile" ON public.profiles FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+    CREATE POLICY "Users can insert their own profile" ON public.profiles FOR INSERT TO authenticated WITH CHECK ((select auth.uid()) = user_id);
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Users can update their own profile') THEN
-    CREATE POLICY "Users can update their own profile" ON public.profiles FOR UPDATE TO authenticated USING (auth.uid() = user_id);
+    CREATE POLICY "Users can update their own profile" ON public.profiles FOR UPDATE TO authenticated USING ((select auth.uid()) = user_id);
   END IF;
 END $$;
 
@@ -52,16 +52,16 @@ ALTER TABLE public.notes ENABLE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'notes' AND policyname = 'Users can view their own notes') THEN
-    CREATE POLICY "Users can view their own notes" ON public.notes FOR SELECT TO authenticated USING (auth.uid() = user_id);
+    CREATE POLICY "Users can view their own notes" ON public.notes FOR SELECT TO authenticated USING ((select auth.uid()) = user_id);
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'notes' AND policyname = 'Users can create their own notes') THEN
-    CREATE POLICY "Users can create their own notes" ON public.notes FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+    CREATE POLICY "Users can create their own notes" ON public.notes FOR INSERT TO authenticated WITH CHECK ((select auth.uid()) = user_id);
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'notes' AND policyname = 'Users can update their own notes') THEN
-    CREATE POLICY "Users can update their own notes" ON public.notes FOR UPDATE TO authenticated USING (auth.uid() = user_id);
+    CREATE POLICY "Users can update their own notes" ON public.notes FOR UPDATE TO authenticated USING ((select auth.uid()) = user_id);
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'notes' AND policyname = 'Users can delete their own notes') THEN
-    CREATE POLICY "Users can delete their own notes" ON public.notes FOR DELETE TO authenticated USING (auth.uid() = user_id);
+    CREATE POLICY "Users can delete their own notes" ON public.notes FOR DELETE TO authenticated USING ((select auth.uid()) = user_id);
   END IF;
 END $$;
 
@@ -186,36 +186,44 @@ $$;
 -- Replace initial notes policies with collaboration-aware ones (safe: drop first)
 DROP POLICY IF EXISTS "Users can view their own notes" ON public.notes;
 DROP POLICY IF EXISTS "Users can view accessible notes" ON public.notes;
+DROP POLICY IF EXISTS "Users can view notes by share token" ON public.notes;
 CREATE POLICY "Users can view accessible notes" ON public.notes
   FOR SELECT TO authenticated
-  USING (auth.uid() = user_id OR public.has_note_access(auth.uid(), id));
+  USING (
+    (select auth.uid()) = user_id
+    OR public.has_note_access((select auth.uid()), id)
+    OR (
+      share_token IS NOT NULL
+      AND share_token = (select current_setting('request.query.share_token', true))
+    )
+  );
 
 DROP POLICY IF EXISTS "Users can update their own notes" ON public.notes;
 DROP POLICY IF EXISTS "Users can update accessible notes" ON public.notes;
 CREATE POLICY "Users can update accessible notes" ON public.notes
   FOR UPDATE TO authenticated
-  USING (auth.uid() = user_id OR public.can_edit_note(auth.uid(), id));
+  USING ((select auth.uid()) = user_id OR public.can_edit_note((select auth.uid()), id));
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'note_collaborators' AND policyname = 'Note owners can view collaborators') THEN
     CREATE POLICY "Note owners can view collaborators" ON public.note_collaborators
       FOR SELECT TO authenticated
-      USING (public.has_note_access(auth.uid(), note_id));
+      USING (public.has_note_access((select auth.uid()), note_id));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'note_collaborators' AND policyname = 'Note owners can add collaborators') THEN
     CREATE POLICY "Note owners can add collaborators" ON public.note_collaborators
       FOR INSERT TO authenticated
-      WITH CHECK (public.is_note_owner(auth.uid(), note_id));
+      WITH CHECK (public.is_note_owner((select auth.uid()), note_id));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'note_collaborators' AND policyname = 'Note owners can update collaborators') THEN
     CREATE POLICY "Note owners can update collaborators" ON public.note_collaborators
       FOR UPDATE TO authenticated
-      USING (public.is_note_owner(auth.uid(), note_id));
+      USING (public.is_note_owner((select auth.uid()), note_id));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'note_collaborators' AND policyname = 'Note owners can remove collaborators') THEN
     CREATE POLICY "Note owners can remove collaborators" ON public.note_collaborators
       FOR DELETE TO authenticated
-      USING (public.is_note_owner(auth.uid(), note_id) OR auth.uid() = user_id);
+      USING (public.is_note_owner((select auth.uid()), note_id) OR (select auth.uid()) = user_id);
   END IF;
 END $$;
 
@@ -276,7 +284,7 @@ ALTER TABLE public.ai_user_keys ENABLE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'ai_user_keys' AND policyname = 'Users manage own keys') THEN
-    CREATE POLICY "Users manage own keys" ON public.ai_user_keys FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+    CREATE POLICY "Users manage own keys" ON public.ai_user_keys FOR ALL TO authenticated USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
   END IF;
 END $$;
 
@@ -293,7 +301,7 @@ ALTER TABLE public.ai_user_models ENABLE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'ai_user_models' AND policyname = 'Users manage own models') THEN
-    CREATE POLICY "Users manage own models" ON public.ai_user_models FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+    CREATE POLICY "Users manage own models" ON public.ai_user_models FOR ALL TO authenticated USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
   END IF;
 END $$;
 
@@ -311,10 +319,10 @@ ALTER TABLE public.ai_usage_logs ENABLE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'ai_usage_logs' AND policyname = 'Users read own logs') THEN
-    CREATE POLICY "Users read own logs" ON public.ai_usage_logs FOR SELECT TO authenticated USING (auth.uid() = user_id);
+    CREATE POLICY "Users read own logs" ON public.ai_usage_logs FOR SELECT TO authenticated USING ((select auth.uid()) = user_id);
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'ai_usage_logs' AND policyname = 'System inserts logs') THEN
-    CREATE POLICY "System inserts logs" ON public.ai_usage_logs FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+    CREATE POLICY "System inserts logs" ON public.ai_usage_logs FOR INSERT TO authenticated WITH CHECK ((select auth.uid()) = user_id);
   END IF;
 END $$;
 
@@ -353,22 +361,22 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'expenses' AND policyname = 'Users with note access can view expenses') THEN
     CREATE POLICY "Users with note access can view expenses"
       ON public.expenses FOR SELECT TO authenticated
-      USING (has_note_access(auth.uid(), note_id));
+      USING (has_note_access((select auth.uid()), note_id));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'expenses' AND policyname = 'Users who can edit note can insert expenses') THEN
     CREATE POLICY "Users who can edit note can insert expenses"
       ON public.expenses FOR INSERT TO authenticated
-      WITH CHECK (can_edit_note(auth.uid(), note_id) OR is_note_owner(auth.uid(), note_id));
+      WITH CHECK (can_edit_note((select auth.uid()), note_id) OR is_note_owner((select auth.uid()), note_id));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'expenses' AND policyname = 'Users who can edit note can update expenses') THEN
     CREATE POLICY "Users who can edit note can update expenses"
       ON public.expenses FOR UPDATE TO authenticated
-      USING (can_edit_note(auth.uid(), note_id) OR is_note_owner(auth.uid(), note_id));
+      USING (can_edit_note((select auth.uid()), note_id) OR is_note_owner((select auth.uid()), note_id));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'expenses' AND policyname = 'Users who can edit note can delete expenses') THEN
     CREATE POLICY "Users who can edit note can delete expenses"
       ON public.expenses FOR DELETE TO authenticated
-      USING (can_edit_note(auth.uid(), note_id) OR is_note_owner(auth.uid(), note_id));
+      USING (can_edit_note((select auth.uid()), note_id) OR is_note_owner((select auth.uid()), note_id));
   END IF;
 
   -- Expense items policies
@@ -376,28 +384,28 @@ DO $$ BEGIN
     CREATE POLICY "Users with note access can view expense items"
       ON public.expense_items FOR SELECT TO authenticated
       USING (EXISTS (
-        SELECT 1 FROM public.expenses e WHERE e.id = expense_id AND has_note_access(auth.uid(), e.note_id)
+        SELECT 1 FROM public.expenses e WHERE e.id = expense_id AND has_note_access((select auth.uid()), e.note_id)
       ));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'expense_items' AND policyname = 'Users who can edit can insert expense items') THEN
     CREATE POLICY "Users who can edit can insert expense items"
       ON public.expense_items FOR INSERT TO authenticated
       WITH CHECK (EXISTS (
-        SELECT 1 FROM public.expenses e WHERE e.id = expense_id AND (can_edit_note(auth.uid(), e.note_id) OR is_note_owner(auth.uid(), e.note_id))
+        SELECT 1 FROM public.expenses e WHERE e.id = expense_id AND (can_edit_note((select auth.uid()), e.note_id) OR is_note_owner((select auth.uid()), e.note_id))
       ));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'expense_items' AND policyname = 'Users who can edit can update expense items') THEN
     CREATE POLICY "Users who can edit can update expense items"
       ON public.expense_items FOR UPDATE TO authenticated
       USING (EXISTS (
-        SELECT 1 FROM public.expenses e WHERE e.id = expense_id AND (can_edit_note(auth.uid(), e.note_id) OR is_note_owner(auth.uid(), e.note_id))
+        SELECT 1 FROM public.expenses e WHERE e.id = expense_id AND (can_edit_note((select auth.uid()), e.note_id) OR is_note_owner((select auth.uid()), e.note_id))
       ));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'expense_items' AND policyname = 'Users who can edit can delete expense items') THEN
     CREATE POLICY "Users who can edit can delete expense items"
       ON public.expense_items FOR DELETE TO authenticated
       USING (EXISTS (
-        SELECT 1 FROM public.expenses e WHERE e.id = expense_id AND (can_edit_note(auth.uid(), e.note_id) OR is_note_owner(auth.uid(), e.note_id))
+        SELECT 1 FROM public.expenses e WHERE e.id = expense_id AND (can_edit_note((select auth.uid()), e.note_id) OR is_note_owner((select auth.uid()), e.note_id))
       ));
   END IF;
 
@@ -408,7 +416,7 @@ DO $$ BEGIN
       USING (EXISTS (
         SELECT 1 FROM public.expense_items ei
         JOIN public.expenses e ON e.id = ei.expense_id
-        WHERE ei.id = item_id AND has_note_access(auth.uid(), e.note_id)
+        WHERE ei.id = item_id AND has_note_access((select auth.uid()), e.note_id)
       ));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'expense_item_participants' AND policyname = 'Users who can edit can insert item participants') THEN
@@ -417,7 +425,7 @@ DO $$ BEGIN
       WITH CHECK (EXISTS (
         SELECT 1 FROM public.expense_items ei
         JOIN public.expenses e ON e.id = ei.expense_id
-        WHERE ei.id = item_id AND (can_edit_note(auth.uid(), e.note_id) OR is_note_owner(auth.uid(), e.note_id))
+        WHERE ei.id = item_id AND (can_edit_note((select auth.uid()), e.note_id) OR is_note_owner((select auth.uid()), e.note_id))
       ));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'expense_item_participants' AND policyname = 'Users who can edit can delete item participants') THEN
@@ -426,7 +434,7 @@ DO $$ BEGIN
       USING (EXISTS (
         SELECT 1 FROM public.expense_items ei
         JOIN public.expenses e ON e.id = ei.expense_id
-        WHERE ei.id = item_id AND (can_edit_note(auth.uid(), e.note_id) OR is_note_owner(auth.uid(), e.note_id))
+        WHERE ei.id = item_id AND (can_edit_note((select auth.uid()), e.note_id) OR is_note_owner((select auth.uid()), e.note_id))
       ));
   END IF;
 END $$;
@@ -470,7 +478,7 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'expense_audits' AND policyname = 'Users with note access can view expense audits') THEN
     CREATE POLICY "Users with note access can view expense audits"
       ON public.expense_audits FOR SELECT TO authenticated
-      USING (has_note_access(auth.uid(), note_id));
+      USING (has_note_access((select auth.uid()), note_id));
   END IF;
 END $$;
 
@@ -601,16 +609,8 @@ BEGIN
 END;
 $$;
 
--- Allow reading a SPECIFIC note by share_token (join screen passes the token
--- as a query param / RPC argument). The previous policy exposed ALL shared
--- notes to every authenticated user.
-DROP POLICY IF EXISTS "Users can view notes by share token" ON public.notes;
-CREATE POLICY "Users can view notes by share token" ON public.notes
-  FOR SELECT TO authenticated
-  USING (
-    share_token IS NOT NULL
-    AND share_token = current_setting('request.query.share_token', true)
-  );
+-- Share-token SELECT access is now consolidated into the
+-- "Users can view accessible notes" policy in MIGRATION 2 above.
 
 -- ============================================================
 -- MIGRATION 9: Add FK from note_collaborators to profiles
@@ -672,17 +672,17 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'note_expense_settings' AND policyname = 'Users with note access can view expense settings') THEN
     CREATE POLICY "Users with note access can view expense settings"
       ON public.note_expense_settings FOR SELECT TO authenticated
-      USING (has_note_access(auth.uid(), note_id));
+      USING (has_note_access((select auth.uid()), note_id));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'note_expense_settings' AND policyname = 'Users who can edit can upsert expense settings') THEN
     CREATE POLICY "Users who can edit can upsert expense settings"
       ON public.note_expense_settings FOR INSERT TO authenticated
-      WITH CHECK (can_edit_note(auth.uid(), note_id) OR is_note_owner(auth.uid(), note_id));
+      WITH CHECK (can_edit_note((select auth.uid()), note_id) OR is_note_owner((select auth.uid()), note_id));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'note_expense_settings' AND policyname = 'Users who can edit can update expense settings') THEN
     CREATE POLICY "Users who can edit can update expense settings"
       ON public.note_expense_settings FOR UPDATE TO authenticated
-      USING (can_edit_note(auth.uid(), note_id) OR is_note_owner(auth.uid(), note_id));
+      USING (can_edit_note((select auth.uid()), note_id) OR is_note_owner((select auth.uid()), note_id));
   END IF;
 END $$;
 
@@ -709,22 +709,22 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'note_manual_users' AND policyname = 'Users with note access can view manual users') THEN
     CREATE POLICY "Users with note access can view manual users"
       ON public.note_manual_users FOR SELECT TO authenticated
-      USING (has_note_access(auth.uid(), note_id));
+      USING (has_note_access((select auth.uid()), note_id));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'note_manual_users' AND policyname = 'Users who can edit can add manual users') THEN
     CREATE POLICY "Users who can edit can add manual users"
       ON public.note_manual_users FOR INSERT TO authenticated
-      WITH CHECK (can_edit_note(auth.uid(), note_id) OR is_note_owner(auth.uid(), note_id));
+      WITH CHECK (can_edit_note((select auth.uid()), note_id) OR is_note_owner((select auth.uid()), note_id));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'note_manual_users' AND policyname = 'Users who can edit can update manual users') THEN
     CREATE POLICY "Users who can edit can update manual users"
       ON public.note_manual_users FOR UPDATE TO authenticated
-      USING (can_edit_note(auth.uid(), note_id) OR is_note_owner(auth.uid(), note_id));
+      USING (can_edit_note((select auth.uid()), note_id) OR is_note_owner((select auth.uid()), note_id));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'note_manual_users' AND policyname = 'Users who can edit can delete manual users') THEN
     CREATE POLICY "Users who can edit can delete manual users"
       ON public.note_manual_users FOR DELETE TO authenticated
-      USING (can_edit_note(auth.uid(), note_id) OR is_note_owner(auth.uid(), note_id));
+      USING (can_edit_note((select auth.uid()), note_id) OR is_note_owner((select auth.uid()), note_id));
   END IF;
 END $$;
 
@@ -742,6 +742,31 @@ DO $$ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.note_manual_users;
   END IF;
 END $$;
+
+-- ============================================================
+-- MIGRATION 13: get_user_notes RPC (consolidates 2-3 queries)
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION public.get_user_notes()
+RETURNS SETOF public.notes
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT n.*
+  FROM public.notes n
+  WHERE n.user_id = (select auth.uid())
+
+  UNION
+
+  SELECT n.*
+  FROM public.notes n
+  INNER JOIN public.note_collaborators nc ON nc.note_id = n.id
+  WHERE nc.user_id = (select auth.uid())
+
+  ORDER BY updated_at DESC
+$$;
 
 -- ============================================================
 -- Done! All tables, policies, functions, and triggers are set up.

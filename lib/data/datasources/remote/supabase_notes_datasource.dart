@@ -8,43 +8,10 @@ class SupabaseNotesDatasource {
   final SupabaseClient _client;
 
   Future<List<NoteModel>> getNotes() async {
-    final userId = _client.auth.currentUser!.id;
-
-    final ownedNotes = await _client
-        .from('notes')
-        .select()
-        .eq('user_id', userId)
-        .order('updated_at', ascending: false);
-
-    final collaboratorRows = await _client
-        .from('note_collaborators')
-        .select('note_id')
-        .eq('user_id', userId);
-
-    final collabNoteIds = (collaboratorRows as List)
-        .map((r) => r['note_id'] as String)
+    final response = await _client.rpc('get_user_notes');
+    return (response as List)
+        .map((json) => NoteModel.fromJson(json as Map<String, dynamic>))
         .toList();
-
-    List<Map<String, dynamic>> collabNotes = [];
-    if (collabNoteIds.isNotEmpty) {
-      collabNotes = await _client
-          .from('notes')
-          .select()
-          .inFilter('id', collabNoteIds)
-          .order('updated_at', ascending: false);
-    }
-
-    final allNoteIds = <String>{};
-    final allNotes = <NoteModel>[];
-
-    for (final json in [...ownedNotes, ...collabNotes]) {
-      final model = NoteModel.fromJson(json);
-      if (allNoteIds.add(model.id)) {
-        allNotes.add(model);
-      }
-    }
-
-    return allNotes;
   }
 
   Future<NoteModel?> getNote(String id) async {

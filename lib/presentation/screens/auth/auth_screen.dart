@@ -235,7 +235,30 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                           return null;
                         },
                       ),
-                      const SizedBox(height: 28),
+                      if (_isLogin) ...[
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () => context.push('/forgot-password'),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 4, vertical: 2),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: Text(
+                              'Forgot password?',
+                              style: TextStyle(
+                                color: scheme.primary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      SizedBox(height: _isLogin ? 16 : 28),
                       SizedBox(
                         width: double.infinity,
                         height: 50,

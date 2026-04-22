@@ -1,11 +1,14 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../presentation/screens/auth/auth_screen.dart';
+import '../../presentation/screens/auth/forgot_password_screen.dart';
+import '../../presentation/screens/auth/reset_password_screen.dart';
 import '../../presentation/screens/dashboard/dashboard_screen.dart';
 import '../../presentation/screens/join_note/join_note_screen.dart';
 import '../../presentation/screens/settings/settings_screen.dart';
@@ -20,8 +23,17 @@ String? _authRedirect(GoRouterState state) {
     return loggedIn ? '/dashboard' : '/auth';
   }
 
+  // /auth redirects to dashboard when already logged in.
+  // /forgot-password is NOT redirected because its 3-step OTP flow
+  // creates a session at step 2 (verify) and needs to stay on the
+  // screen for step 3 (new password).
   if (location == '/auth' && loggedIn) {
     return '/dashboard';
+  }
+
+  // /reset-password requires a valid session (set by the email link).
+  if (location == '/reset-password' && !loggedIn) {
+    return '/auth';
   }
 
   final isProtected =
@@ -44,7 +56,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/',
     refreshListenable: refreshNotifier,
-    redirect: (context, state) => _authRedirect(state),
+    redirect: (context, state) {
+      if (refreshNotifier.pendingPasswordRecovery) {
+        refreshNotifier.pendingPasswordRecovery = false;
+        return '/reset-password';
+      }
+      return _authRedirect(state);
+    },
     routes: [
       GoRoute(
         path: '/',
@@ -55,6 +73,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => _sharedAxis(
           state,
           const AuthScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/forgot-password',
+        pageBuilder: (context, state) => _sharedAxis(
+          state,
+          const ForgotPasswordScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/reset-password',
+        pageBuilder: (context, state) => _sharedAxis(
+          state,
+          const ResetPasswordScreen(),
         ),
       ),
       GoRoute(
@@ -121,16 +153,19 @@ CustomTransitionPage<T> _sharedAxis<T>(GoRouterState state, Widget child) {
 class _AuthRefreshNotifier extends ChangeNotifier {
   late final StreamSubscription<AuthState> _sub;
   String? _lastUserId;
+  bool pendingPasswordRecovery = false;
 
   _AuthRefreshNotifier() {
     _lastUserId = Supabase.instance.client.auth.currentUser?.id;
     _sub = Supabase.instance.client.auth.onAuthStateChange.listen((event) {
+      debugPrint('[AuthRefresh] event=${event.event}, session=${event.session != null}');
       final newId = event.session?.user.id;
-      // When the signed-in user changes (sign-out + sign-in, or account
-      // switch), reset per-session UI memos so they don't leak across users.
       if (newId != _lastUserId) {
         _lastUserId = newId;
         resetAnimatedListItemMemo();
+      }
+      if (event.event == AuthChangeEvent.passwordRecovery) {
+        pendingPasswordRecovery = true;
       }
       notifyListeners();
     });

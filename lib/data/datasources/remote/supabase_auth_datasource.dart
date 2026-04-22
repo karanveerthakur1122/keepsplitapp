@@ -19,6 +19,7 @@ class SupabaseAuthDatasource {
     final response = await _client.auth.signUp(
       email: email,
       password: password,
+      emailRedirectTo: 'https://llpvrckmkchzinatxvbf.supabase.co/auth/v1/callback',
       data: displayName != null
           ? {'display_name': displayName, 'full_name': displayName}
           : null,
@@ -42,6 +43,21 @@ class SupabaseAuthDatasource {
 
   Future<void> updatePassword(String newPassword) async {
     await _client.auth.updateUser(UserAttributes(password: newPassword));
+  }
+
+  Future<void> resetPasswordForEmail(String email) async {
+    await _client.auth.resetPasswordForEmail(email);
+  }
+
+  Future<AuthResponse> verifyOtp({
+    required String email,
+    required String token,
+  }) async {
+    return await _client.auth.verifyOTP(
+      email: email,
+      token: token,
+      type: OtpType.recovery,
+    );
   }
 
   Future<ProfileModel?> getProfile(String userId) async {
