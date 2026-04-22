@@ -275,6 +275,46 @@ class SupabaseRealtimeDatasource {
     });
   }
 
+  RealtimeChannel subscribeToCollabNotifications({
+    required String currentUserId,
+    required void Function(String eventType, Map<String, dynamic> record)
+        onCollabEvent,
+  }) {
+    const channelName = 'collab-notifs';
+    _channels[channelName]?.unsubscribe();
+
+    final channel = _client.channel(channelName);
+    channel
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'note_collaborators',
+          callback: (payload) {
+            final record = payload.newRecord;
+            final targetUserId = record['user_id'] as String? ?? '';
+            if (targetUserId == currentUserId) {
+              onCollabEvent('invited', record);
+            }
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'note_collaborators',
+          callback: (payload) {
+            final record = payload.newRecord;
+            final targetUserId = record['user_id'] as String? ?? '';
+            if (targetUserId == currentUserId) {
+              onCollabEvent('permission_changed', record);
+            }
+          },
+        )
+        .subscribe();
+
+    _channels[channelName] = channel;
+    return channel;
+  }
+
   void unsubscribe(String channelName) {
     _channels[channelName]?.unsubscribe();
     _channels.remove(channelName);

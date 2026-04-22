@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/app_toast.dart';
 import '../../../core/utils/haptics.dart';
 import '../../providers/notes_provider.dart';
 import '../liquid_glass/liquid_glass_input.dart';
@@ -55,14 +56,11 @@ class _CreateNoteSheetState extends ConsumerState<CreateNoteSheet> {
       if (_isPinned) {
         await ref.read(notesProvider.notifier).pin(note.id, true);
       }
+      AppToast.success('Note created');
       if (mounted) Navigator.pop(context, note);
     } catch (e) {
       _didSave = false;
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to create note')),
-        );
-      }
+      AppToast.error('Failed to create note');
     } finally {
       if (mounted) setState(() => _loading = false);
     }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/app_toast.dart';
 import '../../../core/utils/debouncer.dart';
 import '../../../core/utils/haptics.dart';
 import '../../../domain/entities/note.dart';
@@ -351,6 +352,7 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
                         ref
                             .read(notesProvider.notifier)
                             .pin(widget.note.id, _isPinned);
+                        AppToast.info(_isPinned ? 'Pinned' : 'Unpinned');
                       },
                     ),
                     _ToolbarButton(
@@ -422,6 +424,7 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
                         FocusScope.of(context).unfocus();
                         Navigator.of(context, rootNavigator: true).pop();
                         ref.read(notesProvider.notifier).trash(noteId);
+                        AppToast.info('Moved to trash');
                       },
                     ),
                     const SizedBox(width: 4),
@@ -546,6 +549,7 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
                                   .read(noteExpensesProvider(widget.note.id)
                                       .notifier)
                                   .addExpense(user.id);
+                              AppToast.success('Expense added');
                               if (!context.mounted) return;
                               // Auto-open the detail sheet so the user can
                               // immediately start adding items.

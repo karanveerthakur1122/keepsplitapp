@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/utils/app_toast.dart';
 import 'presentation/providers/sync_provider.dart';
 import 'presentation/providers/theme_provider.dart';
 
@@ -34,6 +35,7 @@ class _KeepBillNotesAppState extends ConsumerState<KeepBillNotesApp> {
     return MaterialApp.router(
       title: 'Keepsplit',
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: AppToast.scaffoldMessengerKey,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: themeMode,

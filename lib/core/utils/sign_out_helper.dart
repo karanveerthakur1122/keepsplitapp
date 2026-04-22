@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -27,13 +29,18 @@ Future<void> performSignOut(WidgetRef ref) async {
     await prefs.remove('custom_note_order');
   } catch (_) {}
 
-  // 4. Reset ephemeral Riverpod state
-  ref.invalidate(notesProvider);
-  ref.invalidate(noteOrderProvider);
-  ref.invalidate(dashboardSectionProvider);
-  ref.invalidate(searchQueryProvider);
-
-  // 5. Sign out from Supabase (this fires the auth state change stream,
-  //    which causes the router to redirect to /auth).
+  // 4. Sign out from Supabase FIRST. This fires the auth state change
+  //    stream which causes the router to redirect to /auth and dispose
+  //    the dashboard widget tree.
   await ref.read(authRepositoryProvider).signOut();
+
+  // 5. Invalidate ephemeral Riverpod state AFTER sign-out so the
+  //    dashboard's ConsumerState is already unmounted and won't try
+  //    to rebuild from stale provider notifications.
+  scheduleMicrotask(() {
+    ref.invalidate(notesProvider);
+    ref.invalidate(noteOrderProvider);
+    ref.invalidate(dashboardSectionProvider);
+    ref.invalidate(searchQueryProvider);
+  });
 }

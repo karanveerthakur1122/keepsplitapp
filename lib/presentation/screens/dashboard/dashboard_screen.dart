@@ -3,8 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/notification_service.dart';
 import '../../../core/utils/haptics.dart';
+import '../../../data/datasources/remote/supabase_realtime_datasource.dart';
 import '../../../domain/entities/note.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/collaborator_counts_provider.dart';
 import '../../providers/notes_provider.dart';
 import '../../providers/realtime_provider.dart';
@@ -29,10 +32,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   late Animation<double> _drawerSlide;
   late Animation<double> _drawerFade;
   double _edgeSwipeDx = 0;
+  late final SupabaseRealtimeDatasource _realtime;
 
   @override
   void initState() {
     super.initState();
+    _realtime = ref.read(realtimeDatasourceProvider);
     _drawerAnimCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 180),
@@ -54,20 +59,41 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   @override
   void dispose() {
     _drawerAnimCtrl.dispose();
-    final realtime = ref.read(realtimeDatasourceProvider);
-    realtime.unsubscribe('notes-list');
+    _realtime.unsubscribe('notes-list');
+    _realtime.unsubscribe('collab-notifs');
     super.dispose();
   }
 
   void _setupRealtimeRefresh() {
-    final realtime = ref.read(realtimeDatasourceProvider);
-    realtime.subscribeToNotesList(onAnyChange: () {
+    _realtime.subscribeToNotesList(onAnyChange: () {
       if (!mounted) return;
-      // Silent refetch — no AsyncLoading flash — so realtime updates don't
-      // undo our optimistic mutations or shimmer the grid on every change.
       ref.read(notesProvider.notifier).silentRefresh();
       ref.invalidate(collaboratorCountsProvider);
     });
+
+    final user = ref.read(currentUserProvider);
+    if (user != null) {
+      _realtime.subscribeToCollabNotifications(
+        currentUserId: user.id,
+        onCollabEvent: (eventType, record) {
+          if (!mounted) return;
+          final permission = record['permission'] as String? ?? '';
+          final notif = NotificationService.instance;
+
+          if (eventType == 'invited') {
+            notif.showSmart(
+              title: 'You were added to a note',
+              body: 'Someone invited you as $permission.',
+            );
+          } else if (eventType == 'permission_changed') {
+            notif.showSmart(
+              title: 'Permission updated',
+              body: 'Your role was changed to $permission.',
+            );
+          }
+        },
+      );
+    }
   }
 
   void _toggleDrawer() {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/app_toast.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/haptics.dart';
 import '../../../domain/entities/expense.dart';
@@ -153,6 +154,7 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
           payerId: currentPayerId,
           participantUserIds: selected.toList(),
         );
+    AppToast.success('Item added');
     _nameCtrl.clear();
     _priceCtrl.clear();
     setState(() => _newItemSplit = null);
@@ -393,6 +395,7 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
               ref
                   .read(noteExpensesProvider(noteId).notifier)
                   .deleteExpense(expenseId);
+              AppToast.info('Expense deleted');
             },
             tooltip: 'Delete expense',
           ),
@@ -582,6 +585,7 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
                     ref
                         .read(noteExpensesProvider(widget.noteId).notifier)
                         .deleteItem(item.id);
+                    AppToast.info('Item removed');
                   },
                 ),
               ],

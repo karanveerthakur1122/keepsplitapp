@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/app_toast.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/liquid_glass/liquid_glass_modal.dart';
 import '../../widgets/liquid_glass/liquid_glass_input.dart';
@@ -52,13 +53,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               : _nameCtrl.text.trim(),
         );
       }
+      if (_isLogin) {
+        AppToast.success('Welcome back!');
+      } else {
+        AppToast.success('Account created! Check your email to verify.');
+      }
       if (mounted) context.go('/dashboard');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_friendlyError(e))),
-        );
-      }
+      AppToast.error(_friendlyError(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -260,8 +262,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       ),
                       const SizedBox(height: 16),
                       TextButton(
-                        onPressed: () =>
-                            setState(() => _isLogin = !_isLogin),
+                        onPressed: () {
+                          setState(() => _isLogin = !_isLogin);
+                          AppToast.info(
+                            _isLogin ? 'Sign in to your account' : 'Create an account',
+                          );
+                        },
                         child: Text.rich(
                           TextSpan(
                             text: _isLogin

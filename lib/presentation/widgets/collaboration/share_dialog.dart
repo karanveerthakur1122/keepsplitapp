@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/app_toast.dart';
 import '../../../data/datasources/remote/supabase_collaborator_datasource.dart';
 import '../../../domain/entities/note.dart';
 import '../../providers/auth_provider.dart';
@@ -50,11 +51,7 @@ class _ShareDialogState extends ConsumerState<ShareDialog> {
       final authDS = ref.read(authDatasourceProvider);
       final profile = await authDS.getProfileByEmail(email);
       if (profile == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('No user found with email: $email')),
-          );
-        }
+        AppToast.error('No user found with email: $email');
         return;
       }
 
@@ -71,17 +68,9 @@ class _ShareDialogState extends ConsumerState<ShareDialog> {
       ref.invalidate(collaboratorsProvider(widget.note.id));
       ref.invalidate(collaboratorCountsProvider);
       _emailCtrl.clear();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Collaborator added!')),
-        );
-      }
+      AppToast.success('Collaborator added!');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
+      AppToast.error('Failed to invite collaborator');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -97,12 +86,9 @@ class _ShareDialogState extends ConsumerState<ShareDialog> {
         _shareToken = token;
       });
       ref.invalidate(notesProvider);
+      AppToast.success('Invite code created');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error generating link: $e')),
-        );
-      }
+      AppToast.error('Failed to generate invite code');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -118,12 +104,9 @@ class _ShareDialogState extends ConsumerState<ShareDialog> {
       // token locally.
       ref.invalidate(notesProvider);
       setState(() => _shareToken = null);
+      AppToast.info('Invite code removed');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
+      AppToast.error('Failed to remove invite code');
     }
   }
 
@@ -282,11 +265,7 @@ class _ShareDialogState extends ConsumerState<ShareDialog> {
                         onPressed: () {
                           Clipboard.setData(
                               ClipboardData(text: _shareToken!));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content:
-                                    Text('Invite code copied to clipboard')),
-                          );
+                          AppToast.success('Invite code copied to clipboard');
                         },
                       ),
                       IconButton(

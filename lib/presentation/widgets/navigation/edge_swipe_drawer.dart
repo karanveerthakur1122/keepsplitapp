@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/utils/app_toast.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/haptics.dart';
 import '../../../core/utils/sign_out_helper.dart';
@@ -242,6 +243,7 @@ class EdgeSwipeDrawer extends ConsumerWidget {
                         onTap: () async {
                           onClose();
                           await performSignOut(ref);
+                          AppToast.info('Signed out');
                         },
                       ),
                     ),
@@ -311,16 +313,11 @@ class _JoinByCodeDialogState extends ConsumerState<_JoinByCodeDialog> {
       final ds = SupabaseCollaboratorDatasource(client);
       // Accept either raw token OR a full URL — extract the last path segment.
       final token = code.contains('/') ? code.split('/').last : code;
-      // Capture the messenger BEFORE popping — after pop, this context is
-      // deactivated and showing a SnackBar on it will fail silently.
-      final messenger = ScaffoldMessenger.maybeOf(context);
       await ds.joinViaToken(token, user.id);
       ref.invalidate(notesProvider);
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
-      messenger?.showSnackBar(
-        const SnackBar(content: Text('Successfully joined the note')),
-      );
+      AppToast.success('Successfully joined the note');
     } catch (e) {
       if (mounted) {
         setState(() {

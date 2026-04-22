@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/utils/app_toast.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/haptics.dart';
 import '../../providers/collaborators_provider.dart';
@@ -511,12 +512,7 @@ class _ExpenseSettingsSheetState extends ConsumerState<ExpenseSettingsSheet> {
     await Clipboard.setData(ClipboardData(text: buf.toString()));
     if (!mounted) return;
     Haptics.confirm();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Expense summary copied to clipboard'),
-        backgroundColor: Colors.green,
-      ),
-    );
+    AppToast.success('Expense summary copied to clipboard');
   }
 
   Future<void> _exportAsCsv(ColorScheme scheme) async {
@@ -545,12 +541,7 @@ class _ExpenseSettingsSheetState extends ConsumerState<ExpenseSettingsSheet> {
     await Clipboard.setData(ClipboardData(text: buf.toString()));
     if (!mounted) return;
     Haptics.confirm();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('CSV copied to clipboard'),
-        backgroundColor: Colors.green,
-      ),
-    );
+    AppToast.success('CSV copied to clipboard');
   }
 }
 
