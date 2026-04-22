@@ -41,6 +41,14 @@ class AuthRepositoryImpl implements AuthRepository {
       _remote.updatePassword(newPassword);
 
   @override
+  Future<void> resetPasswordForEmail(String email) =>
+      _remote.resetPasswordForEmail(email);
+
+  @override
+  Future<AuthResponse> verifyOtp({required String email, required String token}) =>
+      _remote.verifyOtp(email: email, token: token);
+
+  @override
   Future<Profile?> getProfile(String userId) async {
     final model = await _remote.getProfile(userId);
     return model?.toEntity();

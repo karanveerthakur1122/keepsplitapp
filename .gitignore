@@ -15,3 +15,8 @@ android/.gradle/
 android/local.properties
 ios/Pods/
 ios/.symlinks/
+
+# Graphify output
+graphify-out/
+.graphify_*.json
+.graphify_*.txt

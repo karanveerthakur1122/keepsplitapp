@@ -289,24 +289,26 @@ class SupabaseRealtimeDatasource {
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'note_collaborators',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: currentUserId,
+          ),
           callback: (payload) {
-            final record = payload.newRecord;
-            final targetUserId = record['user_id'] as String? ?? '';
-            if (targetUserId == currentUserId) {
-              onCollabEvent('invited', record);
-            }
+            onCollabEvent('invited', payload.newRecord);
           },
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
           table: 'note_collaborators',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: currentUserId,
+          ),
           callback: (payload) {
-            final record = payload.newRecord;
-            final targetUserId = record['user_id'] as String? ?? '';
-            if (targetUserId == currentUserId) {
-              onCollabEvent('permission_changed', record);
-            }
+            onCollabEvent('permission_changed', payload.newRecord);
           },
         )
         .subscribe();
