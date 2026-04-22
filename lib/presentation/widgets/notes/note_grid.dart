@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
+import '../../../core/constants/demo_data.dart';
 import '../../../core/utils/haptics.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../domain/entities/note.dart';
@@ -21,12 +22,14 @@ class NoteGrid extends ConsumerStatefulWidget {
     required this.isLoading,
     this.onNoteTap,
     this.onNoteShare,
+    this.demoNoteKey,
   });
 
   final List<Note> notes;
   final bool isLoading;
   final void Function(Note note)? onNoteTap;
   final void Function(Note note)? onNoteShare;
+  final GlobalKey? demoNoteKey;
 
   @override
   ConsumerState<NoteGrid> createState() => _NoteGridState();
@@ -52,6 +55,16 @@ class _NoteGridState extends ConsumerState<NoteGrid> {
     if (!_isDragging) {
       _localNotes = List.of(widget.notes);
     }
+  }
+
+  Widget _buildNoteCard(Note note) {
+    final card = NoteCard(
+      key: note.id == demoNoteId ? widget.demoNoteKey : null,
+      note: note,
+      onTap: () => widget.onNoteTap?.call(note),
+      onShare: () => widget.onNoteShare?.call(note),
+    );
+    return card;
   }
 
   // ── Drag callbacks ────────────────────────────────────────────
@@ -322,11 +335,7 @@ class _NoteGridState extends ConsumerState<NoteGrid> {
                 r: r,
                 child: AnimatedListItem(
                   index: index,
-                  child: NoteCard(
-                    note: note,
-                    onTap: () => widget.onNoteTap?.call(note),
-                    onShare: () => widget.onNoteShare?.call(note),
-                  ),
+                  child: _buildNoteCard(note),
                 ),
               ),
             );
@@ -351,11 +360,7 @@ class _NoteGridState extends ConsumerState<NoteGrid> {
                 r: r,
                 child: AnimatedListItem(
                   index: index,
-                  child: NoteCard(
-                    note: note,
-                    onTap: () => widget.onNoteTap?.call(note),
-                    onShare: () => widget.onNoteShare?.call(note),
-                  ),
+                  child: _buildNoteCard(note),
                 ),
               ),
             );
@@ -393,11 +398,7 @@ class _NoteGridState extends ConsumerState<NoteGrid> {
               r: r,
               child: AnimatedListItem(
                 index: index,
-                child: NoteCard(
-                  note: note,
-                  onTap: () => widget.onNoteTap?.call(note),
-                  onShare: () => widget.onNoteShare?.call(note),
-                ),
+                child: _buildNoteCard(note),
               ),
             ),
           );
@@ -423,11 +424,7 @@ class _NoteGridState extends ConsumerState<NoteGrid> {
             r: r,
             child: AnimatedListItem(
               index: index,
-              child: NoteCard(
-                note: note,
-                onTap: () => widget.onNoteTap?.call(note),
-                onShare: () => widget.onNoteShare?.call(note),
-              ),
+              child: _buildNoteCard(note),
             ),
           ),
         );

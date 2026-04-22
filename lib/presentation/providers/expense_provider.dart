@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/constants/demo_data.dart';
 import '../../data/datasources/local/expenses_local_datasource.dart';
 import '../../data/datasources/remote/supabase_expenses_datasource.dart';
 import '../../data/repositories/expenses_repository_impl.dart';
@@ -40,6 +41,7 @@ class NoteExpensesNotifier extends FamilyAsyncNotifier<List<Expense>, String> {
 
   @override
   Future<List<Expense>> build(String arg) async {
+    if (arg == demoNoteId) return demoExpenses;
     return ref.read(expensesRepositoryProvider).getExpensesForNote(arg);
   }
 
@@ -340,6 +342,13 @@ final settlementProvider =
   final expenses = await ref.watch(noteExpensesProvider(noteId).future);
   if (expenses.isEmpty) {
     return const SettlementResult(balances: [], settlements: [], total: 0);
+  }
+
+  if (noteId == demoNoteId) {
+    return ref.read(expensesRepositoryProvider).computeSettlements(
+          expenses: expenses,
+          participantNames: demoParticipantNames,
+        );
   }
 
   final participantIds = <String>{};

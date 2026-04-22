@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/constants/demo_data.dart';
 import '../../data/datasources/remote/supabase_collaborator_datasource.dart';
 import '../../core/utils/extensions.dart';
 import '../../domain/entities/collaborator.dart';
@@ -12,6 +13,7 @@ import 'expense_settings_provider.dart';
 /// collaborators, changing permissions, or transferring ownership.
 final collaboratorsProvider =
     FutureProvider.family<List<Collaborator>, String>((ref, noteId) async {
+  if (noteId == demoNoteId) return [];
   final client = ref.watch(supabaseClientProvider);
   final ds = SupabaseCollaboratorDatasource(client);
   final authDS = ref.watch(authDatasourceProvider);

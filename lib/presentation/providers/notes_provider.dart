@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/constants/demo_data.dart';
 import '../../data/datasources/local/drift_database.dart';
 import '../../data/datasources/local/notes_local_datasource.dart';
 import '../../data/datasources/remote/supabase_notes_datasource.dart';
@@ -10,6 +11,7 @@ import '../../domain/repositories/notes_repository.dart';
 import 'auth_provider.dart';
 import 'collaborator_counts_provider.dart';
 import 'note_order_provider.dart';
+import 'tutorial_provider.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) => AppDatabase());
 
@@ -156,6 +158,7 @@ final filteredNotesProvider = Provider<AsyncValue<List<Note>>>((ref) {
   final currentUser = ref.watch(currentUserProvider);
   final counts = ref.watch(collaboratorCountsProvider).valueOrNull ??
       const <String, int>{};
+  final hasSeenTutorial = ref.watch(tutorialProvider);
 
   return notesAsync.whenData((notes) {
     var filtered = notes.where((n) {
@@ -210,6 +213,10 @@ final filteredNotesProvider = Provider<AsyncValue<List<Note>>>((ref) {
         if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
         return b.updatedAt.compareTo(a.updatedAt);
       });
+    }
+
+    if (!hasSeenTutorial && section == DashboardSection.all) {
+      list.insert(0, demoNote);
     }
 
     return list;

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/constants/demo_data.dart';
 import 'auth_provider.dart';
 
 // ── Currency helpers ───────────────────────────────────────────────
@@ -41,6 +42,7 @@ typedef ExpenseSettings = ({String currency});
 
 final noteExpenseSettingsProvider =
     FutureProvider.family<ExpenseSettings, String>((ref, noteId) async {
+  if (noteId == demoNoteId) return (currency: 'INR');
   final client = ref.watch(supabaseClientProvider);
   final row = await client
       .from('note_expense_settings')
@@ -70,6 +72,7 @@ typedef ManualUser = ({String id, String displayName});
 
 final noteManualUsersProvider =
     FutureProvider.family<List<ManualUser>, String>((ref, noteId) async {
+  if (noteId == demoNoteId) return demoManualUsers;
   final client = ref.watch(supabaseClientProvider);
   final rows = await client
       .from('note_manual_users')
@@ -135,6 +138,7 @@ typedef AuditEntry = ({
 
 final noteExpenseAuditsProvider =
     FutureProvider.family<List<AuditEntry>, String>((ref, noteId) async {
+  if (noteId == demoNoteId) return [];
   final client = ref.watch(supabaseClientProvider);
   final rows = await client
       .from('expense_audits')
