@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/notification_service.dart';
 import '../../../core/utils/haptics.dart';
+import '../../../data/datasources/remote/supabase_realtime_datasource.dart';
 import '../../../domain/entities/note.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/collaborator_counts_provider.dart';
@@ -31,10 +32,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   late Animation<double> _drawerSlide;
   late Animation<double> _drawerFade;
   double _edgeSwipeDx = 0;
+  late final SupabaseRealtimeDatasource _realtime;
 
   @override
   void initState() {
     super.initState();
+    _realtime = ref.read(realtimeDatasourceProvider);
     _drawerAnimCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 180),
@@ -56,15 +59,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   @override
   void dispose() {
     _drawerAnimCtrl.dispose();
-    final realtime = ref.read(realtimeDatasourceProvider);
-    realtime.unsubscribe('notes-list');
-    realtime.unsubscribe('collab-notifs');
+    _realtime.unsubscribe('notes-list');
+    _realtime.unsubscribe('collab-notifs');
     super.dispose();
   }
 
   void _setupRealtimeRefresh() {
-    final realtime = ref.read(realtimeDatasourceProvider);
-    realtime.subscribeToNotesList(onAnyChange: () {
+    _realtime.subscribeToNotesList(onAnyChange: () {
       if (!mounted) return;
       ref.read(notesProvider.notifier).silentRefresh();
       ref.invalidate(collaboratorCountsProvider);
@@ -72,7 +73,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
 
     final user = ref.read(currentUserProvider);
     if (user != null) {
-      realtime.subscribeToCollabNotifications(
+      _realtime.subscribeToCollabNotifications(
         currentUserId: user.id,
         onCollabEvent: (eventType, record) {
           if (!mounted) return;
