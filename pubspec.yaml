@@ -30,6 +30,8 @@ dependencies:
   url_launcher: ^6.3.1
   flutter_dotenv: ^5.2.1
   flutter_displaymode: ^0.6.0
+  flutter_local_notifications: ^18.0.0
+  permission_handler: ^11.3.0
 
 dev_dependencies:
   flutter_test:

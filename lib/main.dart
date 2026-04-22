@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -9,6 +10,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
 import 'core/constants/supabase_constants.dart';
+import 'core/services/notification_service.dart';
 
 void main() {
   // Do only the *synchronous* binding here so runApp is reached in the first
@@ -38,7 +40,9 @@ class _BootState extends State<_Boot> {
         anonKey: SupabaseConstants.supabaseAnonKey,
       ),
       _tryEnableHighRefreshRate(),
+      NotificationService.instance.init(),
     ]);
+    unawaited(NotificationService.instance.requestPermission());
   }
 
   @override

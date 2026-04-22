@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/app_toast.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/haptics.dart';
 import '../../../domain/entities/expense.dart';
@@ -101,6 +102,7 @@ class ExpenseBlock extends ConsumerWidget {
           await ref
               .read(noteExpensesProvider(noteId).notifier)
               .deleteExpense(expense.id);
+          AppToast.info('Expense deleted');
           return true;
         }
         return false;

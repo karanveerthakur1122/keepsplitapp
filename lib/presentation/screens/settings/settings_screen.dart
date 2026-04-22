@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show AuthException;
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/app_toast.dart';
 import '../../../core/utils/haptics.dart';
 import '../../../core/utils/sign_out_helper.dart';
 import '../../providers/auth_provider.dart';
@@ -83,56 +84,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (user == null) return;
     final newName = _nameCtrl.text.trim();
     if (newName.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Display name cannot be empty')),
-      );
+      AppToast.error('Display name cannot be empty');
       return;
     }
     Haptics.tap();
     FocusScope.of(context).unfocus();
     setState(() => _loading = true);
-    final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(authRepositoryProvider).updateProfile(
             userId: user.id,
             displayName: newName,
           );
-      // Refresh all providers that surface the display name so the drawer,
-      // header, expense payer lists, and collaborator chips all update.
       ref.invalidate(currentProfileProvider);
       ref.invalidate(profileProvider(user.id));
       ref.invalidate(authStateProvider);
       if (!mounted) return;
       Haptics.confirm();
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Profile updated'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      AppToast.success('Profile updated');
     } on AuthException catch (e) {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      AppToast.error(e.message);
     } catch (e) {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('Failed to update profile: ${_humanError(e)}')),
-      );
+      AppToast.error('Failed to update profile: ${_humanError(e)}');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _changePassword() async {
-    final messenger = ScaffoldMessenger.of(context);
     final pw = _passwordCtrl.text.trim();
     if (pw.length < 6) {
-      messenger.showSnackBar(
-        const SnackBar(
-            content: Text('Password must be at least 6 characters')),
-      );
+      AppToast.error('Password must be at least 6 characters');
       return;
     }
     Haptics.tap();
@@ -143,24 +124,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (!mounted) return;
       _passwordCtrl.clear();
       Haptics.confirm();
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Password updated successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      AppToast.success('Password updated successfully');
     } on AuthException catch (e) {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      AppToast.error(e.message);
     } catch (e) {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-            content:
-                Text('Failed to update password: ${_humanError(e)}')),
-      );
+      AppToast.error('Failed to update password: ${_humanError(e)}');
     } finally {
       if (mounted) setState(() => _passwordLoading = false);
     }
@@ -367,6 +335,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         onPressed: () async {
                           Haptics.confirm();
                           await performSignOut(ref);
+                          AppToast.info('Signed out');
                         },
                         icon: Icon(Icons.logout_rounded,
                             color: scheme.error, size: 18),

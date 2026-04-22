@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/app_toast.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/haptics.dart';
 import '../../../domain/entities/note.dart';
@@ -156,13 +157,15 @@ class _NoteCardState extends ConsumerState<NoteCard> {
             Haptics.confirm();
             _passedThreshold = false;
             if (direction == DismissDirection.startToEnd) {
-              // Context-aware left→right swipe.
               if (_isTrashed) {
                 await ref.read(notesProvider.notifier).restore(note.id);
+                AppToast.success('Note restored');
               } else if (_isArchived) {
                 await ref.read(notesProvider.notifier).archive(note.id, false);
+                AppToast.info('Unarchived');
               } else {
                 await ref.read(notesProvider.notifier).archive(note.id, true);
+                AppToast.info('Archived');
               }
               return false;
             } else {
@@ -170,6 +173,7 @@ class _NoteCardState extends ConsumerState<NoteCard> {
                 final ok = await _confirmPermanentDelete();
                 if (!ok) return false;
                 await ref.read(notesProvider.notifier).delete(note.id);
+                AppToast.info('Note deleted permanently');
                 return true;
               } else {
                 setState(() => _showDeleteConfirm = true);
@@ -369,6 +373,7 @@ class _NoteCardState extends ConsumerState<NoteCard> {
                           onPressed: () {
                             setState(() => _showDeleteConfirm = false);
                             ref.read(notesProvider.notifier).trash(note.id);
+                            AppToast.info('Moved to trash');
                           },
                           style: TextButton.styleFrom(
                             backgroundColor: Colors.white,
@@ -431,9 +436,9 @@ class _NoteCardState extends ConsumerState<NoteCard> {
                     title: Text(note.isPinned ? 'Unpin' : 'Pin'),
                     onTap: () {
                       Navigator.pop(ctx);
-                      ref
-                          .read(notesProvider.notifier)
-                          .pin(note.id, !note.isPinned);
+                      final pinning = !note.isPinned;
+                      ref.read(notesProvider.notifier).pin(note.id, pinning);
+                      AppToast.info(pinning ? 'Pinned' : 'Unpinned');
                     },
                   ),
                   ListTile(
@@ -442,6 +447,7 @@ class _NoteCardState extends ConsumerState<NoteCard> {
                     onTap: () {
                       Navigator.pop(ctx);
                       ref.read(notesProvider.notifier).archive(note.id, true);
+                      AppToast.info('Archived');
                     },
                   ),
                   if (widget.onShare != null)
@@ -460,6 +466,7 @@ class _NoteCardState extends ConsumerState<NoteCard> {
                     onTap: () {
                       Navigator.pop(ctx);
                       ref.read(notesProvider.notifier).trash(note.id);
+                      AppToast.info('Moved to trash');
                     },
                   ),
                 ] else ...[
@@ -469,6 +476,7 @@ class _NoteCardState extends ConsumerState<NoteCard> {
                     onTap: () {
                       Navigator.pop(ctx);
                       ref.read(notesProvider.notifier).restore(note.id);
+                      AppToast.success('Note restored');
                     },
                   ),
                   ListTile(
@@ -480,6 +488,7 @@ class _NoteCardState extends ConsumerState<NoteCard> {
                       final ok = await _confirmPermanentDelete();
                       if (!ok) return;
                       ref.read(notesProvider.notifier).delete(note.id);
+                      AppToast.info('Note deleted permanently');
                     },
                   ),
                 ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/app_toast.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/haptics.dart';
 import '../../../data/datasources/remote/supabase_collaborator_datasource.dart';
@@ -111,6 +112,7 @@ class CollaboratorManager extends ConsumerWidget {
                               );
                               ref.invalidate(
                                   collaboratorsProvider(noteId));
+                              AppToast.success('Permission updated');
                             },
                           ),
                   );
@@ -180,6 +182,7 @@ class CollaboratorManager extends ConsumerWidget {
     ref.invalidate(notesProvider);
     ref.invalidate(collaboratorsProvider(noteId));
     ref.invalidate(collaboratorCountsProvider);
+    AppToast.info('You left this note');
 
     if (context.mounted) {
       Navigator.of(context).popUntil((route) => route.isFirst);

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/utils/app_toast.dart';
 import '../../../data/datasources/remote/supabase_collaborator_datasource.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/liquid_glass/liquid_glass_modal.dart';
@@ -41,9 +42,7 @@ class _JoinNoteScreenState extends ConsumerState<JoinNoteScreen> {
       await datasource.joinViaToken(widget.token, user.id);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Successfully joined the note!')),
-        );
+        AppToast.success('Successfully joined the note!');
         context.go('/dashboard');
       }
     } catch (e) {
